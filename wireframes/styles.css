@@ -1,0 +1,95 @@
+/* Low-fidelity wireframe styles — Week 1 mockups */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #f0f0f0;
+  color: #333;
+  font-size: 14px;
+}
+.wf-badge {
+  position: fixed; top: 8px; right: 8px;
+  background: #ff6b35; color: #fff;
+  padding: 4px 10px; font-size: 11px; font-weight: 700;
+  border-radius: 4px; z-index: 100;
+}
+.layout { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 220px; background: #2d3748; color: #e2e8f0;
+  padding: 16px 0; flex-shrink: 0;
+}
+.sidebar .logo {
+  padding: 0 16px 20px; font-weight: 700; font-size: 16px;
+  border-bottom: 1px solid #4a5568; margin-bottom: 12px;
+}
+.sidebar nav a {
+  display: block; padding: 10px 16px; color: #cbd5e0;
+  text-decoration: none; border-left: 3px solid transparent;
+}
+.sidebar nav a:hover, .sidebar nav a.active {
+  background: #4a5568; color: #fff; border-left-color: #63b3ed;
+}
+.main { flex: 1; display: flex; flex-direction: column; }
+.topbar {
+  height: 52px; background: #fff; border-bottom: 2px dashed #ccc;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px;
+}
+.topbar .search {
+  width: 280px; height: 32px; background: #e8e8e8;
+  border: 1px dashed #999; border-radius: 4px;
+}
+.content { padding: 24px; flex: 1; }
+.page-title { font-size: 22px; font-weight: 600; margin-bottom: 20px; color: #1a202c; }
+.card {
+  background: #fff; border: 2px dashed #bbb;
+  border-radius: 6px; padding: 16px; margin-bottom: 16px;
+}
+.card h3 { font-size: 13px; color: #666; margin-bottom: 12px; text-transform: uppercase; }
+.grid { display: grid; gap: 16px; }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.stat-box {
+  height: 80px; background: linear-gradient(135deg, #e8e8e8, #d0d0d0);
+  border-radius: 4px; display: flex; align-items: center; justify-content: center;
+  font-weight: 600; color: #555;
+}
+.chart-placeholder {
+  height: 200px; background: repeating-linear-gradient(
+    45deg, #eee, #eee 10px, #e0e0e0 10px, #e0e0e0 20px
+  );
+  border-radius: 4px; display: flex; align-items: center; justify-content: center;
+  color: #888; font-size: 13px;
+}
+table.wf-table { width: 100%; border-collapse: collapse; }
+table.wf-table th, table.wf-table td {
+  border: 1px dashed #ccc; padding: 10px; text-align: left;
+}
+table.wf-table th { background: #e8e8e8; font-size: 12px; }
+.btn {
+  display: inline-block; padding: 8px 16px; background: #cbd5e0;
+  border: 2px solid #718096; border-radius: 4px;
+  color: #2d3748; font-weight: 600; text-decoration: none; cursor: default;
+}
+.btn-primary { background: #90cdf4; border-color: #4299e1; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+.form-group .input {
+  height: 36px; background: #e8e8e8; border: 1px dashed #999;
+  border-radius: 4px; width: 100%;
+}
+.form-group textarea.input { height: 100px; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; background: #e8e8e8; border: 1px solid #aaa; }
+.auth-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: #e2e8f0;
+}
+.auth-card {
+  width: 380px; background: #fff; border: 2px dashed #999;
+  border-radius: 8px; padding: 32px;
+}
+.auth-card h1 { font-size: 20px; margin-bottom: 24px; text-align: center; }
+.nav-links { margin-top: 24px; padding: 16px; background: #fff; border: 2px dashed #ccc; }
+.nav-links a { margin-right: 12px; color: #3182ce; }
+.comment-box { background: #f7fafc; border-left: 4px solid #90cdf4; padding: 12px; margin-bottom: 8px; }
+.comment-box.internal { border-left-color: #f6ad55; background: #fffaf0; }
+.timeline li { padding: 8px 0; border-bottom: 1px dashed #ddd; list-style: none; font-size: 13px; }

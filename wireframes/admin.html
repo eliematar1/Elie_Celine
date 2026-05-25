@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin — Wireframe</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <span class="wf-badge">WIREFRAME</span>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">IT Help Desk</div>
+      <nav>
+        <a href="admin.html" class="active">Admin Settings</a>
+        <a href="#">Users</a>
+        <a href="#">Categories</a>
+        <a href="#">Activity Logs</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <div class="content">
+        <h1 class="page-title">Admin Panel</h1>
+        <div style="display:flex; gap:8px; margin-bottom:20px;">
+          <span class="btn btn-primary">Users</span>
+          <span class="btn">Roles</span>
+          <span class="btn">Categories</span>
+          <span class="btn">System Settings</span>
+          <span class="btn">Activity Logs</span>
+        </div>
+        <div class="card">
+          <h3>User management</h3>
+          <span class="btn btn-primary" style="margin-bottom:12px;">+ Add user</span>
+          <table class="wf-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              <tr><td>Elie Matar</td><td>elie@company.com</td><td>Admin</td><td>Active</td><td>Edit · Disable</td></tr>
+              <tr><td>Celine Mortada</td><td>celine@company.com</td><td>Employee</td><td>Active</td><td>Edit · Disable</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>System settings</h3>
+          <p>Auto-assign tickets: [ toggle ]</p>
+          <p>Max attachment size (MB): [ 10 ]</p>
+          <span class="btn btn-primary">Save settings</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

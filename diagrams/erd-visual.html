@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>IT Help Desk — Entity Relationship Diagram</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 32px;
+      min-width: 1400px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 28px;
+      border-bottom: 2px solid #334155;
+      padding-bottom: 20px;
+    }
+    header h1 { font-size: 28px; color: #f8fafc; }
+    header p { color: #94a3b8; margin-top: 8px; font-size: 14px; }
+    .badge {
+      display: inline-block; background: #3b82f6; color: #fff;
+      padding: 4px 12px; border-radius: 20px; font-size: 11px;
+      font-weight: 700; margin-top: 10px;
+    }
+    .canvas {
+      position: relative;
+      width: 1340px;
+      height: 820px;
+      margin: 0 auto;
+      background: #1e293b;
+      border-radius: 12px;
+      border: 1px solid #475569;
+    }
+    .entity {
+      position: absolute;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+      min-width: 168px;
+      overflow: hidden;
+      font-size: 11px;
+    }
+    .entity .head {
+      padding: 8px 12px;
+      font-weight: 700;
+      font-size: 12px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .entity .cols { padding: 8px 12px; color: #334155; line-height: 1.5; }
+    .entity .cols .pk { color: #b45309; font-weight: 600; }
+    .entity .cols .fk { color: #1d4ed8; }
+    .users .head { background: #2563eb; }
+    .roles .head { background: #7c3aed; }
+    .lookup .head { background: #059669; }
+    .ticket .head { background: #dc2626; }
+    .child .head { background: #ea580c; }
+    .support .head { background: #ca8a04; }
+    svg.lines {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+    .legend {
+      margin-top: 24px;
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #64748b; }
+    @media print {
+      body { background: #fff; color: #000; padding: 16px; }
+      .canvas { border: 1px solid #ccc; background: #f8fafc; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>IT Help Desk — Entity Relationship Diagram</h1>
+    <p>Celine Mortada &amp; Elie Matar · SQL Server Express · Database: ITHelpDesk</p>
+    <span class="badge">WEEK 1 DELIVERABLE — SCREENSHOT THIS PAGE</span>
+  </header>
+
+  <div class="canvas" id="canvas">
+    <svg class="lines" viewBox="0 0 1340 820">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/>
+        </marker>
+      </defs>
+      <!-- Users to Tickets -->
+      <line x1="200" y1="280" x2="420" y2="200" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="200" y1="300" x2="420" y2="220" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <!-- Lookups to Tickets -->
+      <line x1="900" y1="120" x2="620" y2="160" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="900" y1="220" x2="620" y2="200" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="900" y1="320" x2="620" y2="240" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <!-- Tickets to children -->
+      <line x1="520" y1="320" x2="200" y2="480" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="540" y1="320" x2="400" y2="480" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="560" y1="320" x2="600" y2="480" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="580" y1="320" x2="800" y2="480" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="500" y1="320" x2="1000" y2="480" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <!-- Users roles -->
+      <line x1="200" y1="100" x2="320" y2="100" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="360" y1="120" x2="200" y2="200" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <!-- Users notifications -->
+      <line x1="160" y1="340" x2="160" y2="560" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+    </svg>
+
+    <!-- Identity -->
+    <div class="entity roles" style="left:40px;top:60px;">
+      <div class="head">AspNetRoles</div>
+      <div class="cols"><span class="pk">Id</span> PK<br/>Name</div>
+    </div>
+    <div class="entity users" style="left:40px;top:200px;">
+      <div class="head">AspNetUsers</div>
+      <div class="cols">
+        <span class="pk">Id</span> PK<br/>
+        Email, FirstName, LastName<br/>
+        Department, IsActive<br/>
+        CreatedAt, LastLoginAt
+      </div>
+    </div>
+    <div class="entity roles" style="left:280px;top:60px;">
+      <div class="head">AspNetUserRoles</div>
+      <div class="cols"><span class="fk">UserId</span> FK<br/><span class="fk">RoleId</span> FK</div>
+    </div>
+
+    <!-- Core ticket -->
+    <div class="entity ticket" style="left:420px;top:120px;width:200px;">
+      <div class="head">Tickets</div>
+      <div class="cols">
+        <span class="pk">Id</span> PK<br/>
+        ReferenceNumber UK<br/>
+        Title, Description<br/>
+        <span class="fk">CategoryId</span> FK<br/>
+        <span class="fk">PriorityId</span> FK<br/>
+        <span class="fk">StatusId</span> FK<br/>
+        <span class="fk">CreatedByUserId</span> FK<br/>
+        <span class="fk">AssignedToUserId</span> FK<br/>
+        CreatedAt, ResolvedAt
+      </div>
+    </div>
+
+    <!-- Lookups -->
+    <div class="entity lookup" style="left:900px;top:60px;">
+      <div class="head">TicketCategories</div>
+      <div class="cols"><span class="pk">Id</span> PK<br/>Name (Hardware…)</div>
+    </div>
+    <div class="entity lookup" style="left:900px;top:160px;">
+      <div class="head">TicketPriorities</div>
+      <div class="cols"><span class="pk">Id</span> PK<br/>Name, Level</div>
+    </div>
+    <div class="entity lookup" style="left:900px;top:260px;">
+      <div class="head">TicketStatuses</div>
+      <div class="cols"><span class="pk">Id</span> PK<br/>Name, IsClosed</div>
+    </div>
+
+    <!-- Ticket children -->
+    <div class="entity child" style="left:40px;top:460px;">
+      <div class="head">TicketAssignments</div>
+      <div class="cols"><span class="fk">TicketId</span> FK<br/><span class="fk">AssignedToUserId</span> FK<br/>IsEscalation</div>
+    </div>
+    <div class="entity child" style="left:280px;top:460px;">
+      <div class="head">TicketComments</div>
+      <div class="cols"><span class="fk">TicketId</span> FK<br/><span class="fk">UserId</span> FK<br/>IsInternal</div>
+    </div>
+    <div class="entity child" style="left:520px;top:460px;">
+      <div class="head">TicketAttachments</div>
+      <div class="cols"><span class="fk">TicketId</span> FK<br/>FileName, FileSizeBytes</div>
+    </div>
+    <div class="entity child" style="left:760px;top:460px;">
+      <div class="head">TicketStatusHistory</div>
+      <div class="cols"><span class="fk">TicketId</span> FK<br/><span class="fk">ToStatusId</span> FK</div>
+    </div>
+    <div class="entity support" style="left:1000px;top:460px;">
+      <div class="head">Notifications</div>
+      <div class="cols"><span class="fk">UserId</span> FK<br/><span class="fk">TicketId</span> FK<br/>IsRead</div>
+    </div>
+    <div class="entity support" style="left:40px;top:620px;">
+      <div class="head">ActivityLogs</div>
+      <div class="cols"><span class="fk">UserId</span> FK<br/>Action, EntityType</div>
+    </div>
+    <div class="entity support" style="left:280px;top:620px;">
+      <div class="head">SystemSettings</div>
+      <div class="cols">SettingKey UK<br/>SettingValue</div>
+    </div>
+    <div class="entity support" style="left:520px;top:620px;">
+      <div class="head">PasswordResetTokens</div>
+      <div class="cols"><span class="fk">UserId</span> FK<br/>Token, ExpiresAt</div>
+    </div>
+    <div class="entity lookup" style="left:760px;top:620px;">
+      <div class="head">KnowledgeBaseArticles</div>
+      <div class="cols">Optional module<br/><span class="fk">CategoryId</span> FK</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:#2563eb"></i> Users / Identity</span>
+    <span><i style="background:#dc2626"></i> Core — Tickets</span>
+    <span><i style="background:#059669"></i> Lookup tables</span>
+    <span><i style="background:#ea580c"></i> Ticket children</span>
+    <span><i style="background:#ca8a04"></i> Notifications &amp; audit</span>
+    <span><b>PK</b> = Primary Key &nbsp; <b>FK</b> = Foreign Key &nbsp; <b>UK</b> = Unique</span>
+  </div>
+  <p class="footer">Export: Print → Save as PDF, or screenshot (Win+Shift+S). Source: database/schema.sql · diagrams/erd.drawio</p>
+</body>
+</html>
