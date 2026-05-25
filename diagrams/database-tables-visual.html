@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>IT Help Desk — Database Schema Overview</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Sans', sans-serif; background: #f1f5f9; padding: 28px; color: #0f172a; }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    .sub { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+    .db-box {
+      background: #fff; border: 2px solid #0ea5e9; border-radius: 12px;
+      padding: 20px; max-width: 1100px; margin: 0 auto 24px;
+      box-shadow: 0 4px 24px rgba(14,165,233,.15);
+    }
+    .db-name {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 18px; font-weight: 700; color: #0369a1;
+      margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px dashed #bae6fd;
+    }
+    .section { margin-bottom: 20px; }
+    .section h2 {
+      font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
+      color: #64748b; margin-bottom: 10px;
+    }
+    .tables { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+    .table-card {
+      border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+      font-size: 12px;
+    }
+    .table-card .t-head {
+      padding: 8px 10px; font-weight: 700; font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px; color: #fff;
+    }
+    .identity .t-head { background: #4f46e5; }
+    .lookup .t-head { background: #059669; }
+    .core .t-head { background: #dc2626; }
+    .related .t-head { background: #d97706; }
+    .system .t-head { background: #64748b; }
+    .table-card .t-cols { padding: 8px 10px; background: #f8fafc; color: #475569; line-height: 1.45; }
+    .sql-file {
+      background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 16px;
+      font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+      max-width: 1100px; margin: 0 auto; line-height: 1.6;
+    }
+    .sql-file .comment { color: #94a3b8; }
+    .sql-file .kw { color: #7dd3fc; }
+    .sql-file .tbl { color: #86efac; }
+    .badge { background: #0ea5e9; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-block; margin-bottom: 16px; }
+    .rel-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    .rel-table th, .rel-table td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+    .rel-table th { background: #f1f5f9; }
+  </style>
+</head>
+<body>
+  <span class="badge">SCREENSHOT FOR SUBMISSION — DATABASE SCHEMA</span>
+  <h1>SQL Server Database Schema</h1>
+  <p class="sub">IT Help Desk &amp; Ticketing · Celine Mortada &amp; Elie Matar · Week 1</p>
+
+  <div class="db-box">
+    <div class="db-name">📦 DATABASE: ITHelpDesk</div>
+
+    <div class="section">
+      <h2>Identity &amp; roles (ASP.NET Identity)</h2>
+      <div class="tables">
+        <div class="table-card identity"><div class="t-head">AspNetUsers</div><div class="t-cols">Id, Email, FirstName, LastName, Department, PasswordHash, IsActive, CreatedAt</div></div>
+        <div class="table-card identity"><div class="t-head">AspNetRoles</div><div class="t-cols">Id, Name (Admin, Agent, Employee, Manager)</div></div>
+        <div class="table-card identity"><div class="t-head">AspNetUserRoles</div><div class="t-cols">UserId → Users, RoleId → Roles</div></div>
+        <div class="table-card identity"><div class="t-head">AspNetUserClaims</div><div class="t-cols">UserId, ClaimType, ClaimValue</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Lookup tables (PDF spec: Categories, Priorities, Statuses)</h2>
+      <div class="tables">
+        <div class="table-card lookup"><div class="t-head">TicketCategories</div><div class="t-cols">Hardware, Software, Network, Email, Access Request, Other</div></div>
+        <div class="table-card lookup"><div class="t-head">TicketPriorities</div><div class="t-cols">Low, Medium, High, Critical</div></div>
+        <div class="table-card lookup"><div class="t-head">TicketStatuses</div><div class="t-cols">Open, In Progress, Pending, Resolved, Closed</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Core (PDF spec: Tickets)</h2>
+      <div class="tables">
+        <div class="table-card core" style="grid-column: span 2;"><div class="t-head">Tickets</div><div class="t-cols">Id, ReferenceNumber (TKT-2026-#####), Title, Description, CategoryId, PriorityId, StatusId, CreatedByUserId, AssignedToUserId, CreatedAt, ResolvedAt, ClosedAt</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Related (PDF spec: Comments, Attachments, Notifications, ActivityLogs)</h2>
+      <div class="tables">
+        <div class="table-card related"><div class="t-head">TicketComments</div><div class="t-cols">TicketId, UserId, Body, IsInternal</div></div>
+        <div class="table-card related"><div class="t-head">TicketAttachments</div><div class="t-cols">TicketId, FileName, StoredFileName, FileSizeBytes</div></div>
+        <div class="table-card related"><div class="t-head">TicketAssignments</div><div class="t-cols">TicketId, AssignedToUserId, AssignedByUserId, IsEscalation</div></div>
+        <div class="table-card related"><div class="t-head">TicketStatusHistory</div><div class="t-cols">TicketId, FromStatusId, ToStatusId, ChangedByUserId</div></div>
+        <div class="table-card related"><div class="t-head">Notifications</div><div class="t-cols">UserId, TicketId, Title, Message, IsRead</div></div>
+        <div class="table-card related"><div class="t-head">ActivityLogs</div><div class="t-cols">UserId, Action, EntityType, EntityId, IpAddress</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>System</h2>
+      <div class="tables">
+        <div class="table-card system"><div class="t-head">SystemSettings</div><div class="t-cols">SettingKey, SettingValue</div></div>
+        <div class="table-card system"><div class="t-head">PasswordResetTokens</div><div class="t-cols">UserId, Token, ExpiresAt</div></div>
+        <div class="table-card system"><div class="t-head">KnowledgeBaseArticles</div><div class="t-cols">Optional — Title, Content, IsPublished</div></div>
+      </div>
+    </div>
+
+    <h2 style="font-size:13px;color:#64748b;margin:20px 0 8px;">KEY RELATIONSHIPS</h2>
+    <table class="rel-table">
+      <tr><th>From</th><th>To</th><th>Relationship</th></tr>
+      <tr><td>Tickets</td><td>TicketCategories</td><td>Many-to-One (CategoryId)</td></tr>
+      <tr><td>Tickets</td><td>TicketPriorities</td><td>Many-to-One (PriorityId)</td></tr>
+      <tr><td>Tickets</td><td>TicketStatuses</td><td>Many-to-One (StatusId)</td></tr>
+      <tr><td>Tickets</td><td>AspNetUsers</td><td>CreatedBy / AssignedTo</td></tr>
+      <tr><td>TicketComments</td><td>Tickets</td><td>Many-to-One (CASCADE delete)</td></tr>
+      <tr><td>Notifications</td><td>Users + Tickets</td><td>Many-to-One each</td></tr>
+    </table>
+  </div>
+
+  <div class="sql-file">
+    <span class="comment">-- Run in SSMS: database/schema.sql then database/seed-data.sql</span><br/>
+    <span class="kw">CREATE DATABASE</span> ITHelpDesk;<br/>
+    <span class="kw">USE</span> ITHelpDesk;<br/>
+    <span class="kw">CREATE TABLE</span> <span class="tbl">Tickets</span> (... <span class="kw">FOREIGN KEY</span> (CategoryId) <span class="kw">REFERENCES</span> <span class="tbl">TicketCategories</span>(Id) ...);
+  </div>
+  <p style="text-align:center;margin-top:16px;font-size:12px;color:#64748b;">Files: database/schema.sql · database/seed-data.sql · database/ITHelpDesk-COMPLETE.sql</p>
+</body>
+</html>

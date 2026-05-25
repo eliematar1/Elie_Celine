@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ticket Detail — Wireframe</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <span class="wf-badge">WIREFRAME</span>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">IT Help Desk</div>
+      <nav>
+        <a href="ticket-list.html" class="active">Tickets</a>
+        <a href="dashboard.html">Dashboard</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <header class="topbar"><span>← Back to list</span><span class="btn btn-primary">Assign Agent</span></header>
+      <div class="content">
+        <h1 class="page-title">TKT-2026-00041 — VPN connection failed</h1>
+        <div class="grid grid-2">
+          <div>
+            <div class="card">
+              <h3>Description</h3>
+              <p>Cannot connect to corporate VPN from home. Error: authentication failed.</p>
+            </div>
+            <div class="card">
+              <h3>Comments</h3>
+              <div class="comment-box"><strong>Employee</strong> · May 23<br/>Started after Windows update.</div>
+              <div class="comment-box internal"><strong>Agent (internal)</strong> · May 24<br/>Check MFA token sync.</div>
+              <div class="form-group" style="margin-top:12px;"><div class="input" style="height:60px;"></div></div>
+              <span class="btn">Post Comment</span>
+              <label style="font-size:12px; margin-left:12px;"><input type="checkbox" /> Internal note</label>
+            </div>
+            <div class="card">
+              <h3>Attachments</h3>
+              <p>📎 error-log.txt &nbsp; 📎 screenshot.png</p>
+              <span class="btn">Upload file</span>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <h3>Details</h3>
+              <p><strong>Status:</strong> <span class="pill">In Progress</span></p>
+              <p><strong>Priority:</strong> <span class="pill">High</span></p>
+              <p><strong>Category:</strong> Network</p>
+              <p><strong>Assigned:</strong> J. Smith</p>
+              <p><strong>Created by:</strong> C. Mortada</p>
+              <div class="form-group" style="margin-top:12px;"><label>Change status</label><div class="input"></div></div>
+              <span class="btn btn-primary">Update</span>
+            </div>
+            <div class="card">
+              <h3>Activity Timeline</h3>
+              <ul class="timeline">
+                <li>May 24 — Status → In Progress (J. Smith)</li>
+                <li>May 23 — Assigned to J. Smith (Admin)</li>
+                <li>May 23 — Ticket created</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>AI Suggestions (Agent)</h3>
+              <p style="font-size:13px; color:#666;">Suggested replies & troubleshooting steps…</p>
+              <span class="btn">Generate suggestion</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
