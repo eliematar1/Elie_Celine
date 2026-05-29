@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reports — Wireframe</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <span class="wf-badge">WIREFRAME</span>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">IT Help Desk</div>
+      <nav><a href="reports.html" class="active">Reports</a></nav>
+    </aside>
+    <div class="main">
+      <div class="content">
+        <h1 class="page-title">Reports & Analytics</h1>
+        <div class="card">
+          <div style="display:flex; gap:12px;">
+            <div class="input" style="width:140px;height:32px;"></div>
+            <div class="input" style="width:140px;height:32px;"></div>
+            <span class="btn">Apply</span>
+            <span class="btn">Export PDF</span>
+            <span class="btn">Export Excel</span>
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card"><h3>Monthly ticket volume</h3><div class="chart-placeholder">[ Line chart ]</div></div>
+          <div class="card"><h3>Avg. resolution time</h3><div class="chart-placeholder">[ 4.2 days ]</div></div>
+        </div>
+        <div class="card">
+          <h3>Agent performance</h3>
+          <table class="wf-table">
+            <thead><tr><th>Agent</th><th>Resolved</th><th>Open</th><th>Avg. time</th></tr></thead>
+            <tbody>
+              <tr><td>J. Smith</td><td>45</td><td>3</td><td>3.1 days</td></tr>
+              <tr><td>A. Lee</td><td>38</td><td>5</td><td>4.8 days</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

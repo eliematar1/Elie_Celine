@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard — Wireframe</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <span class="wf-badge">WIREFRAME</span>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">IT Help Desk</div>
+      <nav>
+        <a href="dashboard.html" class="active">Dashboard</a>
+        <a href="ticket-list.html">Tickets</a>
+        <a href="create-ticket.html">Create Ticket</a>
+        <a href="notifications.html">Notifications</a>
+        <a href="reports.html">Reports</a>
+        <a href="profile.html">Profile</a>
+        <a href="admin.html">Admin</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div class="search"></div>
+        <span>🔔 3 &nbsp; User Name ▼</span>
+      </header>
+      <div class="content">
+        <h1 class="page-title">Dashboard</h1>
+        <div class="grid grid-4" style="margin-bottom:24px;">
+          <div class="card"><h3>Open</h3><div class="stat-box">24</div></div>
+          <div class="card"><h3>In Progress</h3><div class="stat-box">12</div></div>
+          <div class="card"><h3>Pending</h3><div class="stat-box">5</div></div>
+          <div class="card"><h3>Resolved (month)</h3><div class="stat-box">89</div></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Tickets by Category</h3>
+            <div class="chart-placeholder">[ Bar Chart ]</div>
+          </div>
+          <div class="card">
+            <h3>Tickets by Priority</h3>
+            <div class="chart-placeholder">[ Pie Chart ]</div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <h3>Recent Tickets</h3>
+          <table class="wf-table">
+            <thead><tr><th>Ref</th><th>Title</th><th>Status</th><th>Priority</th><th>Agent</th></tr></thead>
+            <tbody>
+              <tr><td>TKT-2026-00042</td><td>Outlook not syncing</td><td><span class="pill">Open</span></td><td><span class="pill">Medium</span></td><td>—</td></tr>
+              <tr><td>TKT-2026-00041</td><td>VPN connection failed</td><td><span class="pill">In Progress</span></td><td><span class="pill">High</span></td><td>J. Smith</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

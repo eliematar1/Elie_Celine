@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ticket List — Wireframe</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <span class="wf-badge">WIREFRAME</span>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">IT Help Desk</div>
+      <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="ticket-list.html" class="active">Tickets</a>
+        <a href="create-ticket.html">Create Ticket</a>
+        <a href="notifications.html">Notifications</a>
+        <a href="reports.html">Reports</a>
+        <a href="admin.html">Admin</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div class="search"></div>
+        <a href="create-ticket.html" class="btn btn-primary">+ New Ticket</a>
+      </header>
+      <div class="content">
+        <h1 class="page-title">Tickets</h1>
+        <div class="card" style="margin-bottom:16px;">
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div class="input" style="width:140px; height:32px;"></div>
+            <div class="input" style="width:120px; height:32px;"></div>
+            <div class="input" style="width:120px; height:32px;"></div>
+            <div class="input" style="width:200px; height:32px;"></div>
+            <span class="btn">Filter</span>
+            <span class="btn">Clear</span>
+          </div>
+        </div>
+        <div class="card">
+          <table class="wf-table">
+            <thead>
+              <tr>
+                <th>Reference</th><th>Title</th><th>Category</th>
+                <th>Priority</th><th>Status</th><th>Assigned</th><th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><a href="ticket-detail.html">TKT-2026-00042</a></td><td>Outlook not syncing</td><td>Email</td><td><span class="pill">Medium</span></td><td><span class="pill">Open</span></td><td>—</td><td>May 24</td></tr>
+              <tr><td><a href="ticket-detail.html">TKT-2026-00041</a></td><td>VPN connection failed</td><td>Network</td><td><span class="pill">High</span></td><td><span class="pill">In Progress</span></td><td>J. Smith</td><td>May 23</td></tr>
+              <tr><td><a href="ticket-detail.html">TKT-2026-00040</a></td><td>Laptop won't boot</td><td>Hardware</td><td><span class="pill">Critical</span></td><td><span class="pill">Pending</span></td><td>A. Lee</td><td>May 22</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:12px; font-size:12px; color:#888;">[ Pagination: 1 2 3 ... ]</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
