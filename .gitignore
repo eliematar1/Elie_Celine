@@ -1,0 +1,32 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.Development.json
+appsettings.*.local.json
+
+# Node / React
+node_modules/
+client/**/node_modules/
+dist/
+build/
+client/**/dist/
+.env.local
+client/**/.env.local
+
+# IDE
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets
+*.pfx
+secrets.json
+
+# Logs
+*.log
