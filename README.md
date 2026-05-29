@@ -51,6 +51,41 @@ Aligned with the official **IT Help Desk.pdf** internship specification (Week 1:
 
 ---
 
+## Repository layout
+
+| Folder | Purpose |
+|--------|---------|
+| `client/it-helpdesk-web/` | **Production React app** (what users see when published) |
+| `src/ITHelpDesk.API/` | ASP.NET Core API |
+| `docs/`, `wireframes/`, `diagrams/`, `database/` | **Internship documentation only** — submit to instructor, not part of the live site |
+
+## Quick Start — Week 2 (Auth + API + React)
+
+**Requires:** .NET 8 SDK + Node.js
+
+```powershell
+# Terminal 1 — API
+cd src\ITHelpDesk.API
+dotnet restore
+dotnet run
+
+# Terminal 2 — React
+cd client\it-helpdesk-web
+npm install
+npm run dev
+```
+
+| URL | Purpose |
+|-----|---------|
+| http://localhost:5173 | React app (login, register, dashboard) |
+| http://localhost:5000/swagger | API docs |
+
+**Demo login:** `admin@ithelpdesk.local` / `Admin@123`
+
+Full guide: [docs/WEEK2-SETUP.md](docs/WEEK2-SETUP.md)
+
+---
+
 ## Quick Start — Run locally (Week 1 preview)
 
 ```powershell
