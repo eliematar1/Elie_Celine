@@ -9,10 +9,12 @@ appsettings.*.local.json
 
 # Node / React
 node_modules/
+client/**/node_modules/
 dist/
 build/
-.env
+client/**/dist/
 .env.local
+client/**/.env.local
 
 # IDE
 .idea/
