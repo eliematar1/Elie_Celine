@@ -16,8 +16,33 @@ export default function TicketDetail() {
   const [newComment, setNewComment] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [loadingComments, setLoadingComments] = useState(true);
+  const [agents, setAgents] = useState([]);
+  const [assigning, setAssigning] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState('');
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const canAssign = currentUser.roles?.includes('Admin') || currentUser.roles?.includes('IT Support Agent');
 
-  // Load comments - moved BEFORE any returns
+  // Load agents
+  useEffect(() => {
+    const loadAgents = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/users/agents', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        const data = await response.json();
+        setAgents(data);
+      } catch (err) {
+        console.error('Failed to load agents', err);
+      }
+    };
+    if (canAssign) {
+      loadAgents();
+    }
+  }, [canAssign]);
+
+  // Load comments
   useEffect(() => {
     const loadComments = async () => {
       try {
@@ -32,10 +57,8 @@ export default function TicketDetail() {
     loadComments();
   }, [id]);
 
-  // Find ticket - moved BEFORE returns
   const ticket = tickets.find(t => String(t.id) === id);
 
-  // Loading state - but hooks are already called above
   if (!tickets.length) return <div className="loading">Loading ticket...</div>;
   if (!ticket) {
     return (
@@ -58,6 +81,32 @@ export default function TicketDetail() {
       alert('Update failed');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!selectedAgent) return;
+    setAssigning(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/tickets/${ticket.id}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ assignedTo: selectedAgent })
+      });
+      if (response.ok) {
+        await refetch();
+        alert('Ticket assigned!');
+        setSelectedAgent('');
+      } else {
+        alert('Assignment failed');
+      }
+    } catch (err) {
+      alert('Assignment failed');
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -95,6 +144,11 @@ export default function TicketDetail() {
     }
   };
 
+  const getAgentName = (agentId) => {
+    const agent = agents.find(a => a.id === agentId);
+    return agent ? agent.name : agentId;
+  };
+
   return (
     <>
       <Link to="/tickets" className="back-link">← Back to tickets</Link>
@@ -103,7 +157,6 @@ export default function TicketDetail() {
           <h1 className="page-title">{ticket.ref || `TKT-${ticket.id}`}</h1>
           <p className="page-sub">{ticket.title}</p>
         </div>
-        <button type="button" className="btn btn-primary">Assign agent</button>
       </div>
 
       <div className="detail-grid">
@@ -161,9 +214,34 @@ export default function TicketDetail() {
               <dt>Status</dt><dd><StatusBadge status={ticket.status} /></dd>
               <dt>Priority</dt><dd><PriorityBadge priority={ticket.priority} /></dd>
               <dt>Category</dt><dd>{ticket.category}</dd>
-              <dt>Assigned</dt><dd>{ticket.assignedTo || 'Unassigned'}</dd>
+              <dt>Assigned</dt><dd>{ticket.assignedTo ? getAgentName(ticket.assignedTo) : 'Unassigned'}</dd>
               <dt>Requester</dt><dd>{ticket.createdBy || 'Unknown'}</dd>
             </dl>
+            
+            {canAssign && (
+              <div style={{ marginTop: 12 }}>
+                <select 
+                  className="filter-input" 
+                  value={selectedAgent}
+                  onChange={(e) => setSelectedAgent(e.target.value)}
+                >
+                  <option value="">Assign to agent...</option>
+                  {agents.map(agent => (
+                    <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>
+                  ))}
+                </select>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ marginTop: 8, width: '100%' }}
+                  onClick={handleAssign}
+                  disabled={assigning || !selectedAgent}
+                >
+                  {assigning ? 'Assigning...' : 'Assign ticket'}
+                </button>
+              </div>
+            )}
+            
             <select 
               className="filter-input" 
               style={{ marginTop: 12 }}
@@ -194,12 +272,24 @@ export default function TicketDetail() {
             </button>
           </div>
           <div className="card">
-            <h3 className="card-title">Activity</h3>
-            <ul className="timeline">
-              <li><span>{ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : 'Unknown'}</span> Ticket created</li>
-              <li><span>Current</span> Status: {ticket.status}</li>
-            </ul>
-          </div>
+  <h3 className="card-title">Activity Timeline</h3>
+  <ul className="timeline">
+    {ticket.activityLog && ticket.activityLog.length > 0 ? (
+      [...ticket.activityLog].reverse().map((log) => (
+        <li key={log.id}>
+          <span>{new Date(log.timestamp).toLocaleString()}</span>
+          {log.action === 'ticket_created' && `Ticket created: ${log.details.title}`}
+          {log.action === 'status_change' && `Status changed: ${log.details.oldValue} → ${log.details.newValue}`}
+          {log.action === 'assignment' && `Assigned: ${log.details.oldValue} → ${log.details.newValue}`}
+          {log.action === 'comment_added' && `Comment added: ${log.details.message} ${log.details.isInternal ? '(Internal note)' : ''}`}
+        </li>
+      ))
+    ) : (
+      <li><span>{new Date(ticket.createdAt).toLocaleDateString()}</span> Ticket created</li>
+    )}
+    <li><span>Current</span> Status: {ticket.status}</li>
+  </ul>
+</div>
         </div>
       </div>
     </>
