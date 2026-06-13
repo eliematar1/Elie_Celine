@@ -36,6 +36,16 @@ async function seed() {
     department: 'Sales',
     roles: ['Employee'],
   });
+  const hash3 = await bcrypt.hash('Agent@123', 10);
+  users.push({
+  id: '3',
+  email: 'agent@ithelpdesk.local',
+  passwordHash: hash3,
+  firstName: 'Support',
+  lastName: 'Agent',
+  department: 'IT',
+  roles: ['IT Support Agent'],
+});
 }
 
 function toProfile(u) {
@@ -134,16 +144,30 @@ app.get('/api/tickets', authMiddleware, (req, res) => {
 app.post('/api/tickets', authMiddleware, (req, res) => {
   const { title, description, category, priority } = req.body;
   const newTicket = {
-    id: String(nextTicketId++),
-    title,
-    description,
-    category: category || 'Other',
-    priority: priority || 'Medium',
-    status: 'Open',
-    createdBy: req.user.sub,
-    createdAt: new Date().toISOString()
-  };
+  id: String(nextTicketId++),
+  title,
+  description,
+  category: category || 'Other',
+  priority: priority || 'Medium',
+  status: 'Open',
+  createdBy: req.user.sub,
+  createdAt: new Date().toISOString(),
+  assignedTo: null,
+  activityLog: []
+};
   tickets.push(newTicket);
+  // Add this right after pushing the ticket
+newTicket.activityLog.push({
+  id: Date.now(),
+  action: 'ticket_created',
+  performedBy: req.user.sub,
+  timestamp: new Date().toISOString(),
+  details: {
+    title: title,
+    category: category || 'Other',
+    priority: priority || 'Medium'
+  }
+});
   res.status(201).json(newTicket);
 });
 
@@ -194,9 +218,20 @@ app.post('/api/tickets/:ticketId/comments', authMiddleware, (req, res) => {
     createdAt: new Date().toISOString()
   };
   comments.push(newComment);
+  if (!ticket.activityLog) ticket.activityLog = [];
+  ticket.activityLog.push({
+    id: Date.now(),
+    action: 'comment_added',
+    performedBy: req.user.sub,
+    timestamp: new Date().toISOString(),
+    details: {
+      message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+      isInternal: isInternal || false
+    }
+  });
+  
   res.status(201).json(newComment);
 });
-
 app.delete('/api/comments/:id', authMiddleware, (req, res) => {
   const { id } = req.params;
   const index = comments.findIndex(c => c.id === id);
@@ -204,7 +239,42 @@ app.delete('/api/comments/:id', authMiddleware, (req, res) => {
   comments.splice(index, 1);
   res.status(204).send();
 });
-await seed();
+seed();
+app.get('/api/users/agents', authMiddleware, (req, res) => {
+  const agents = users.filter(u => 
+    u.roles.includes('IT Support Agent') || u.roles.includes('Admin')
+  ).map(agent => ({
+    id: agent.id,
+    name: `${agent.firstName} ${agent.lastName}`,
+    email: agent.email,
+    role: agent.roles[0]
+  }));
+  res.json(agents);
+});
+app.put('/api/tickets/:id/assign', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const { assignedTo } = req.body;
+  const ticket = tickets.find(t => t.id === id);
+  
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+  
+  const oldAssignedTo = ticket.assignedTo;
+  ticket.assignedTo = assignedTo;
+  
+  if (!ticket.activityLog) ticket.activityLog = [];
+  ticket.activityLog.push({
+    id: Date.now(),
+    action: 'assignment',
+    performedBy: req.user.sub,
+    timestamp: new Date().toISOString(),
+    details: {
+      oldValue: oldAssignedTo || 'Unassigned',
+      newValue: assignedTo || 'Unassigned'
+    }
+  });
+  
+  res.json(ticket);
+});
 app.listen(PORT, () => {
   console.log(`\n  IT Help Desk API (dev) http://localhost:${PORT}`);
   console.log(`  Health: http://localhost:${PORT}/api/health`);
