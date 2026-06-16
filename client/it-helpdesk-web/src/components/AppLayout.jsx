@@ -1,12 +1,14 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AppRoles } from '../constants/roles';
+import { notificationsApi } from '../services/ticketsApi';
 
 const nav = [
   { to: '/dashboard', label: 'Dashboard', icon: '▣' },
   { to: '/tickets', label: 'Tickets', icon: '☰' },
   { to: '/tickets/new', label: 'Create Ticket', icon: '＋' },
-  { to: '/notifications', label: 'Notifications', icon: '🔔', badge: 3 },
+  { to: '/notifications', label: 'Notifications', icon: '🔔', badge: true },
   { to: '/reports', label: 'Reports', icon: '◫' },
   { to: '/profile', label: 'Profile', icon: '👤' },
 ];
@@ -14,6 +16,13 @@ const nav = [
 export default function AppLayout() {
   const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    notificationsApi.unreadCount()
+      .then((r) => setUnread(r.data.count))
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="app-shell">
@@ -30,7 +39,7 @@ export default function AppLayout() {
             <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}
-              {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
+              {item.badge && unread > 0 ? <span className="nav-badge">{unread}</span> : null}
             </NavLink>
           ))}
           {(hasRole(AppRoles.Admin) || hasRole(AppRoles.Manager)) && (
