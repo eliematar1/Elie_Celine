@@ -1,21 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
-import { TICKETS, CATEGORIES, STATUSES } from '../data/mockData';
+import { ticketsApi } from '../services/ticketsApi';
 
 export default function TicketList() {
+  const [tickets, setTickets] = useState([]);
+  const [lookups, setLookups] = useState({ statuses: [], categories: [] });
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusId, setStatusId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const filtered = TICKETS.filter((t) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || t.title.toLowerCase().includes(q) || t.ref.toLowerCase().includes(q);
-    const matchStatus = !statusFilter || t.status === statusFilter;
-    const matchCat = !categoryFilter || t.category === categoryFilter;
-    return matchSearch && matchStatus && matchCat;
-  });
+  const load = () => {
+    setLoading(true);
+    ticketsApi.list({
+      search: search || undefined,
+      statusId: statusId || undefined,
+      categoryId: categoryId || undefined,
+    })
+      .then((res) => setTickets(res.data))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    ticketsApi.lookups().then((res) => setLookups(res.data));
+    load();
+  }, []);
 
   return (
     <>
@@ -28,56 +39,43 @@ export default function TicketList() {
       </div>
 
       <div className="card filters-card">
-        <input
-          type="search"
-          className="filter-input"
-          placeholder="Search reference or title…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <input type="search" className="filter-input" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select value={statusId} onChange={(e) => setStatusId(e.target.value)}>
           <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {lookups.statuses?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
           <option value="">All categories</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          {lookups.categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setStatusFilter(''); setCategoryFilter(''); }}>
-          Clear
-        </button>
+        <button type="button" className="btn btn-primary" onClick={load}>Filter</button>
+        <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setStatusId(''); setCategoryId(''); setTimeout(load, 0); }}>Clear</button>
       </div>
 
       <div className="card">
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Title</th>
-                <th>Category</th>
-                <th>Priority</th>
-                <th>Status</th>
-                <th>Assigned</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t) => (
-                <tr key={t.id}>
-                  <td><Link to={`/tickets/${t.id}`} className="ref-link">{t.ref}</Link></td>
-                  <td>{t.title}</td>
-                  <td>{t.category}</td>
-                  <td><PriorityBadge priority={t.priority} /></td>
-                  <td><StatusBadge status={t.status} /></td>
-                  <td>{t.agent}</td>
-                  <td className="text-muted">{t.created}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {filtered.length === 0 && <p className="empty-state">No tickets match your filters.</p>}
+        {loading ? <p className="empty-state">Loading…</p> : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr><th>Reference</th><th>Title</th><th>Category</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Created</th></tr>
+              </thead>
+              <tbody>
+                {tickets.map((t) => (
+                  <tr key={t.id}>
+                    <td><Link to={`/tickets/${t.id}`} className="ref-link">{t.referenceNumber}</Link></td>
+                    <td>{t.title}</td>
+                    <td>{t.category}</td>
+                    <td><PriorityBadge priority={t.priority} /></td>
+                    <td><StatusBadge status={t.status} /></td>
+                    <td>{t.assignedToName || '—'}</td>
+                    <td className="text-muted">{new Date(t.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {tickets.length === 0 && <p className="empty-state">No tickets found.</p>}
+          </div>
+        )}
       </div>
     </>
   );
