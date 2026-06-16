@@ -49,7 +49,8 @@ export default function Login() {
           No account? <Link to="/register">Register</Link>
         </p>
         <p style={{ marginTop: 8, fontSize: '.8rem', color: '#94a3b8', textAlign: 'center' }}>
-          Demo: admin@ithelpdesk.local / Admin@123
+          Demo: admin@ithelpdesk.local / Admin@123<br />
+          agent@ithelpdesk.local / Agent@123 · employee@ithelpdesk.local / Employee@123
         </p>
       </div>
     </div>

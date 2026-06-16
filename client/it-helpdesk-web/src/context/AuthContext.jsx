@@ -42,10 +42,15 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    const { data } = await authApi.me();
+    setUser(data);
+  };
+
   const hasRole = (role) => user?.roles?.includes(role) ?? false;
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, hasRole, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, hasRole, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

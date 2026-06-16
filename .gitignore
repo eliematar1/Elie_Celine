@@ -13,8 +13,13 @@ client/**/node_modules/
 dist/
 build/
 client/**/dist/
+.env
 .env.local
+client/**/.env
 client/**/.env.local
+
+# Accidental nested clone
+Elie_Celine/
 
 # IDE
 .idea/
