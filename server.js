@@ -1,144 +1,282 @@
 /**
- * IT Help Desk — local dev server (Week 1 preview)
- * Serves wireframes, diagrams, and project hub on http://localhost:8080
+ * Dev API server — same routes as ASP.NET AuthController
+ * Use when .NET SDK is not installed. Run: npm start (port 5000)
  */
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+import express from 'express';
+import cors from 'cors';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
-const PORT = process.env.PORT || 8080;
-const ROOT = __dirname;
+const app = express();
+const PORT = 5000;
+const JWT_KEY = 'ITHelpDesk-Super-Secret-Key-Min-32-Chars-Long!!';
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.md': 'text/plain; charset=utf-8',
-  '.sql': 'text/plain; charset=utf-8',
-  '.drawio': 'application/xml',
-};
+const roles = ['Admin', 'IT Support Agent', 'Employee', 'Manager'];
+const users = [];
 
-function send(res, status, body, type = 'text/html; charset=utf-8') {
-  res.writeHead(status, { 'Content-Type': type });
-  res.end(body);
-}
-
-function safePath(urlPath) {
-  const decoded = decodeURIComponent(urlPath.split('?')[0]);
-  const rel = decoded === '/' ? '/index.html' : decoded;
-  const full = path.normalize(path.join(ROOT, rel));
-  if (!full.startsWith(ROOT)) return null;
-  return full;
-}
-
-const hubHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>IT Help Desk — Project Hub</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;padding:40px 24px}
-    .wrap{max-width:720px;margin:0 auto}
-    h1{font-size:1.75rem;margin-bottom:8px}
-    .sub{color:#94a3b8;margin-bottom:28px;font-size:.95rem}
-    .badge{display:inline-block;background:#3b82f6;color:#fff;padding:4px 10px;border-radius:6px;font-size:.75rem;font-weight:700;margin-bottom:24px}
-    section{margin-bottom:28px}
-    section h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:12px}
-    a.card{display:block;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px 18px;margin-bottom:10px;color:#f1f5f9;text-decoration:none;transition:border-color .15s}
-    a.card:hover{border-color:#3b82f6}
-    a.card strong{display:block;margin-bottom:4px}
-    a.card span{font-size:.85rem;color:#94a3b8}
-    .note{margin-top:32px;padding:14px;background:#1e3a5f;border-radius:8px;font-size:.85rem;color:#bae6fd}
-    code{background:#334155;padding:2px 6px;border-radius:4px;font-size:.8rem}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <span class="badge">WEEK 1 — RUNNING LOCALLY</span>
-    <h1>IT Help Desk &amp; Ticketing</h1>
-    <p class="sub">Celine Mortada &amp; Elie Matar · React + ASP.NET Core + SQL Server (planned)</p>
-
-    <section>
-      <h2>UI wireframes</h2>
-      <a class="card" href="/wireframes/index.html"><strong>Wireframes home</strong><span>Login, dashboard, tickets, admin, reports…</span></a>
-      <a class="card" href="/wireframes/dashboard.html"><strong>Dashboard</strong><span>Main agent/employee view</span></a>
-      <a class="card" href="/wireframes/create-ticket.html"><strong>Create ticket</strong><span>New support request form</span></a>
-    </section>
-
-    <section>
-      <h2>Database &amp; ERD</h2>
-      <a class="card" href="/diagrams/erd-visual.html"><strong>ERD diagram (visual)</strong><span>Screenshot-ready entity relationship diagram</span></a>
-      <a class="card" href="/diagrams/database-tables-visual.html"><strong>Database schema overview</strong><span>All tables and relationships</span></a>
-      <a class="card" href="/database/ITHelpDesk-COMPLETE.sql"><strong>SQL script (download)</strong><span>Full schema + seed data for SSMS</span></a>
-    </section>
-
-    <section>
-      <h2>Documentation</h2>
-      <a class="card" href="/docs/00-project-proposal.md"><strong>Project proposal</strong></a>
-      <a class="card" href="/docs/02-system-workflows.md"><strong>System workflows</strong></a>
-      <a class="card" href="/docs/WEEK1-SUBMISSION.md"><strong>Week 1 checklist</strong></a>
-    </section>
-
-    <p class="note">
-      <strong>Status:</strong> Week 1 = planning, wireframes, SQL schema. API + React app start in Week 2.<br/>
-      Install <a href="https://dotnet.microsoft.com/download" style="color:#7dd3fc">.NET 8 SDK</a> + SQL Server Express to run the backend next.<br/>
-      Server: <code>http://localhost:${PORT}</code>
-    </p>
-  </div>
-</body>
-</html>`;
-
-const server = http.createServer((req, res) => {
-  const filePath = safePath(req.url);
-  if (!filePath) return send(res, 403, 'Forbidden');
-
-  if (req.url === '/' || req.url === '/index.html') {
-    return send(res, 200, hubHtml);
-  }
-
-  fs.stat(filePath, (err, stat) => {
-    if (err || !stat.isFile()) {
-      if (req.url.endsWith('/') || !path.extname(filePath)) {
-        const indexTry = path.join(filePath, 'index.html');
-        return fs.stat(indexTry, (e2, s2) => {
-          if (e2 || !s2.isFile()) return send(res, 404, 'Not found');
-          streamFile(indexTry, res);
-        });
-      }
-      return send(res, 404, 'Not found');
-    }
-    streamFile(filePath, res);
+async function seed() {
+  if (users.length) return;
+  const hash = await bcrypt.hash('Admin@123', 10);
+  users.push({
+    id: '1',
+    email: 'admin@ithelpdesk.local',
+    passwordHash: hash,
+    firstName: 'System',
+    lastName: 'Admin',
+    department: 'IT',
+    roles: ['Admin'],
   });
+  const hash2 = await bcrypt.hash('Employee@123', 10);
+  users.push({
+    id: '2',
+    email: 'employee@ithelpdesk.local',
+    passwordHash: hash2,
+    firstName: 'Demo',
+    lastName: 'Employee',
+    department: 'Sales',
+    roles: ['Employee'],
+  });
+  const hash3 = await bcrypt.hash('Agent@123', 10);
+  users.push({
+  id: '3',
+  email: 'agent@ithelpdesk.local',
+  passwordHash: hash3,
+  firstName: 'Support',
+  lastName: 'Agent',
+  department: 'IT',
+  roles: ['IT Support Agent'],
+});
+}
+
+function toProfile(u) {
+  return {
+    id: u.id,
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    department: u.department,
+    roles: u.roles,
+  };
+}
+
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return res.status(401).json({ message: 'Unauthorized' });
+  try {
+    req.user = jwt.verify(header.slice(7), JWT_KEY);
+    next();
+  } catch {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+}
+
+app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8080'], credentials: true }));
+app.use(express.json());
+
+app.get('/api/health', (_, res) => {
+  res.json({ status: 'ok', service: 'IT Help Desk API (Node dev)', database: 'InMemory', time: new Date().toISOString() });
 });
 
-function streamFile(filePath, res) {
-  const ext = path.extname(filePath).toLowerCase();
-  const type = MIME[ext] || 'application/octet-stream';
-  res.writeHead(200, { 'Content-Type': type });
-  fs.createReadStream(filePath)
-    .on('error', () => {
-      if (!res.headersSent) send(res, 500, 'Error');
-      else res.end();
-    })
-    .pipe(res);
-}
+app.post('/api/auth/login', async (req, res) => {
+  await seed();
+  const { email, password } = req.body || {};
+  const user = users.find((u) => u.email === email);
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    return res.status(401).json({ message: 'Invalid email or password.' });
+  }
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  const token = jwt.sign({ sub: user.id, email: user.email, role: user.roles }, JWT_KEY, { expiresIn: '1h' });
+  res.json({ token, expiresAt, user: toProfile(user) });
+});
 
-server.listen(PORT, () => {
-  console.log('');
-  console.log('  IT Help Desk — local server running');
-  console.log('  -------------------------------------');
-  console.log(`  Hub:        http://localhost:${PORT}`);
-  console.log(`  Wireframes: http://localhost:${PORT}/wireframes/index.html`);
-  console.log(`  ERD:        http://localhost:${PORT}/diagrams/erd-visual.html`);
-  console.log(`  Schema:     http://localhost:${PORT}/diagrams/database-tables-visual.html`);
-  console.log('');
-  console.log('  Press Ctrl+C to stop');
-  console.log('');
+app.post('/api/auth/register', async (req, res) => {
+  await seed();
+  const { email, password, firstName, lastName, department, role } = req.body || {};
+  if (!roles.includes(role) && role !== 'Employee') {
+    if (!['Admin', 'IT Support Agent', 'Employee', 'Manager'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role.' });
+    }
+  }
+  if (users.some((u) => u.email === email)) {
+    return res.status(400).json({ message: 'Email already registered.' });
+  }
+  const user = {
+    id: String(users.length + 1),
+    email,
+    passwordHash: await bcrypt.hash(password, 10),
+    firstName,
+    lastName,
+    department: department || null,
+    roles: [role || 'Employee'],
+  };
+  users.push(user);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  const token = jwt.sign({ sub: user.id, email: user.email, role: user.roles }, JWT_KEY, { expiresIn: '1h' });
+  res.json({ token, expiresAt, user: toProfile(user) });
+});
+
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  await seed();
+  const user = users.find((u) => u.id === req.user.sub);
+  if (!user) return res.status(401).json({ message: 'Unauthorized' });
+  res.json(toProfile(user));
+});
+
+app.get('/api/auth/admin-only', authMiddleware, (req, res) => {
+  const userRoles = req.user.role || [];
+  const ok = userRoles.includes('Admin') || userRoles.includes('Manager');
+  if (!ok) return res.status(403).json({ message: 'Forbidden' });
+  res.json({ message: 'You have Admin or Manager access.' });
+});
+
+let tickets = [];
+let nextTicketId = 1;
+
+app.get('/api/tickets', authMiddleware, (req, res) => {
+  const user = users.find(u => u.id === req.user.sub);
+  if (user.roles.includes('Admin')) {
+    return res.json(tickets);
+  }
+  const userTickets = tickets.filter(t => t.createdBy === req.user.sub);
+  res.json(userTickets);
+});
+
+app.post('/api/tickets', authMiddleware, (req, res) => {
+  const { title, description, category, priority } = req.body;
+  const newTicket = {
+  id: String(nextTicketId++),
+  title,
+  description,
+  category: category || 'Other',
+  priority: priority || 'Medium',
+  status: 'Open',
+  createdBy: req.user.sub,
+  createdAt: new Date().toISOString(),
+  assignedTo: null,
+  activityLog: []
+};
+  tickets.push(newTicket);
+  // Add this right after pushing the ticket
+newTicket.activityLog.push({
+  id: Date.now(),
+  action: 'ticket_created',
+  performedBy: req.user.sub,
+  timestamp: new Date().toISOString(),
+  details: {
+    title: title,
+    category: category || 'Other',
+    priority: priority || 'Medium'
+  }
+});
+  res.status(201).json(newTicket);
+});
+
+app.put('/api/tickets/:id', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const { title, description, category, priority, status } = req.body;
+  const ticket = tickets.find(t => t.id === id);
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+  
+  if (title) ticket.title = title;
+  if (description) ticket.description = description;
+  if (category) ticket.category = category;
+  if (priority) ticket.priority = priority;
+  if (status) ticket.status = status;
+  
+  res.json(ticket);
+});
+
+app.delete('/api/tickets/:id', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const index = tickets.findIndex(t => t.id === id);
+  if (index === -1) return res.status(404).json({ message: 'Ticket not found' });
+  tickets.splice(index, 1);
+  res.status(204).send();
+});
+let comments = [];
+let nextCommentId = 1;
+
+app.get('/api/tickets/:ticketId/comments', authMiddleware, (req, res) => {
+  const { ticketId } = req.params;
+  const ticketComments = comments.filter(c => c.ticketId === ticketId);
+  res.json(ticketComments);
+});
+
+app.post('/api/tickets/:ticketId/comments', authMiddleware, (req, res) => {
+  const { ticketId } = req.params;
+  const { message, isInternal } = req.body;
+  
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+  
+  const newComment = {
+    id: String(nextCommentId++),
+    ticketId,
+    message,
+    isInternal: isInternal || false,
+    createdBy: req.user.sub,
+    createdAt: new Date().toISOString()
+  };
+  comments.push(newComment);
+  if (!ticket.activityLog) ticket.activityLog = [];
+  ticket.activityLog.push({
+    id: Date.now(),
+    action: 'comment_added',
+    performedBy: req.user.sub,
+    timestamp: new Date().toISOString(),
+    details: {
+      message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+      isInternal: isInternal || false
+    }
+  });
+  
+  res.status(201).json(newComment);
+});
+app.delete('/api/comments/:id', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const index = comments.findIndex(c => c.id === id);
+  if (index === -1) return res.status(404).json({ message: 'Comment not found' });
+  comments.splice(index, 1);
+  res.status(204).send();
+});
+seed();
+app.get('/api/users/agents', authMiddleware, (req, res) => {
+  const agents = users.filter(u => 
+    u.roles.includes('IT Support Agent') || u.roles.includes('Admin')
+  ).map(agent => ({
+    id: agent.id,
+    name: `${agent.firstName} ${agent.lastName}`,
+    email: agent.email,
+    role: agent.roles[0]
+  }));
+  res.json(agents);
+});
+app.put('/api/tickets/:id/assign', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const { assignedTo } = req.body;
+  const ticket = tickets.find(t => t.id === id);
+  
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+  
+  const oldAssignedTo = ticket.assignedTo;
+  ticket.assignedTo = assignedTo;
+  
+  if (!ticket.activityLog) ticket.activityLog = [];
+  ticket.activityLog.push({
+    id: Date.now(),
+    action: 'assignment',
+    performedBy: req.user.sub,
+    timestamp: new Date().toISOString(),
+    details: {
+      oldValue: oldAssignedTo || 'Unassigned',
+      newValue: assignedTo || 'Unassigned'
+    }
+  });
+  
+  res.json(ticket);
+});
+app.listen(PORT, () => {
+  console.log(`\n  IT Help Desk API (dev) http://localhost:${PORT}`);
+  console.log(`  Health: http://localhost:${PORT}/api/health`);
+  console.log(`  Demo: admin@ithelpdesk.local / Admin@123\n`);
 });
