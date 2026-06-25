@@ -1,3 +1,4 @@
+using ITHelpDesk.API.Data;
 using ITHelpDesk.API.DTOs;
 using ITHelpDesk.API.Models;
 using ITHelpDesk.API.Services;
@@ -14,15 +15,18 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly JwtTokenService _jwt;
+    private readonly ActivityLogService _activityLog;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        JwtTokenService jwt)
+        JwtTokenService jwt,
+        ActivityLogService activityLog)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _jwt = jwt;
+        _activityLog = activityLog;
     }
 
     [HttpPost("register")]
@@ -50,6 +54,8 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Registration failed.", errors = result.Errors.Select(e => e.Description) });
 
         await _userManager.AddToRoleAsync(user, request.Role);
+        await _activityLog.LogAsync(user.Id, "UserRegistered", "User", user.Id, $"Role: {request.Role}");
+
         return await BuildAuthResponse(user);
     }
 
@@ -66,6 +72,7 @@ public class AuthController : ControllerBase
 
         user.LastLoginAt = DateTime.UtcNow;
         await _userManager.UpdateAsync(user);
+        await _activityLog.LogAsync(user.Id, "UserLogin", "User", user.Id);
 
         return await BuildAuthResponse(user);
     }
@@ -79,10 +86,58 @@ public class AuthController : ControllerBase
         return Ok(await ToProfile(user));
     }
 
+    [Authorize]
+    [HttpPut("profile")]
+    public async Task<ActionResult<UserProfileDto>> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        user.FirstName = request.FirstName;
+        user.LastName = request.LastName;
+        user.Department = request.Department;
+        await _userManager.UpdateAsync(user);
+        await _activityLog.LogAsync(user.Id, "ProfileUpdated", "User", user.Id);
+
+        return Ok(await ToProfile(user));
+    }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+            return BadRequest(new { message = "Password change failed.", errors = result.Errors.Select(e => e.Description) });
+
+        await _activityLog.LogAsync(user.Id, "PasswordChanged", "User", user.Id);
+        return Ok(new { message = "Password updated successfully." });
+    }
+
+    [Authorize(Roles = AppRoles.Admin)]
+    [HttpGet("activity-logs")]
+    public async Task<IActionResult> ActivityLogs([FromServices] ApplicationDbContext db)
+    {
+        var logs = db.ActivityLogs
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(50)
+            .Select(l => new { l.Id, l.UserId, l.Action, l.Details, l.CreatedAt })
+            .ToList();
+        return Ok(logs);
+    }
+
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager}")]
     [HttpGet("admin-only")]
     public IActionResult AdminOnly() =>
         Ok(new { message = "You have Admin or Manager access." });
+
+    [Authorize(Roles = AppRoles.Agent)]
+    [HttpGet("agent-only")]
+    public IActionResult AgentOnly() =>
+        Ok(new { message = "You have IT Support Agent access." });
 
     private async Task<ActionResult<AuthResponse>> BuildAuthResponse(ApplicationUser user)
     {
