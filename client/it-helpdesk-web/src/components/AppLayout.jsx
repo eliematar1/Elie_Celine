@@ -55,7 +55,7 @@ export default function AppLayout() {
             <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}
-              {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
+              {item.badge !== null && item.badge !== false ? <span className="nav-badge">{item.badge}</span> : null}
             </NavLink>
           ))}
           {(hasRole(AppRoles.Admin) || hasRole(AppRoles.Manager)) && (
@@ -87,7 +87,8 @@ export default function AppLayout() {
           </div>
           <div className="topbar-actions">
             <NavLink to="/notifications" className="topbar-btn" title="Notifications">
-              🔔{unreadCount > 0 ? <span className="nav-badge">{unreadCount}</span> : null}
+              🔔
+              {unreadCount > 0 ? <span className="nav-badge">{unreadCount}</span> : null}
             </NavLink>
             <div className="topbar-user">
               <span className="avatar sm">{user?.firstName?.[0]}{user?.lastName?.[0]}</span>
