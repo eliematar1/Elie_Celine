@@ -24,7 +24,23 @@ public class AiController : ControllerBase
     [HttpPost("chat")]
     public IActionResult Chat([FromBody] ChatRequest request) =>
         Ok(new { answer = _ai.ChatAnswer(request.Question) });
+
+    [HttpPost("summary")]
+    public IActionResult Summary([FromBody] SummaryRequest request)
+    {
+        var summary = _ai.GenerateSummary(request.Title, request.Description, request.StatusHistory ?? "");
+        return Ok(new { summary });
+    }
+
+    [HttpPost("troubleshoot")]
+    public IActionResult Troubleshoot([FromBody] TroubleshootRequest request)
+    {
+        var steps = _ai.GenerateTroubleshooting(request.Title, request.Description, request.Category);
+        return Ok(new { steps });
+    }
 }
 
 public record AiRequest(string Title, string Description);
 public record ChatRequest(string Question);
+public record SummaryRequest(string Title, string Description, string? StatusHistory);
+public record TroubleshootRequest(string Title, string Description, string Category);

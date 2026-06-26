@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-
+using OfficeOpenXml;
+using QuestPDF;
+using QuestPDF.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
@@ -58,8 +60,20 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<JwtTokenService>();
-
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ActivityLogService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<TicketService>();
+builder.Services.AddScoped<AiService>();
 var jwtKey = builder.Configuration["Jwt:Key"]!;
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = 401;
+        return Task.CompletedTask;
+    };
+});
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -79,7 +93,12 @@ builder.Services.AddAuthentication(options =>
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", p => p.RequireRole(AppRoles.Admin));
+    options.AddPolicy("ManagerOrAdmin", p => p.RequireRole(AppRoles.Admin, AppRoles.Manager));
+    options.AddPolicy("AgentOrAdmin", p => p.RequireRole(AppRoles.Admin, AppRoles.Agent));
+});
 
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? new[] { "http://localhost:5173" };
@@ -91,9 +110,8 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowCredentials());
 });
-
 var app = builder.Build();
-
+QuestPDF.Settings.License = LicenseType.Community;
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

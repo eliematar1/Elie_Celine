@@ -1,30 +1,105 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CATEGORIES, PRIORITIES } from '../data/mockData';
+import { aiApi, ticketsApi } from '../services/ticketsApi';
 
 export default function CreateTicket() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     title: '',
     description: '',
-    category: 'Software',
-    priority: 'Medium',
+    categoryId: '',
+    priorityId: '',
   });
+  const [categories, setCategories] = useState([]);
+  const [priorities, setPriorities] = useState([]);
   const [submitted, setSubmitted] = useState(false);
+  const [createdReference, setCreatedReference] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiAnswer, setAiAnswer] = useState('');
+  const [askingAi, setAskingAi] = useState(false);
+  const [aiError, setAiError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const loadLookups = async () => {
+      try {
+        const { data } = await ticketsApi.lookups();
+        if (!active) return;
+        setCategories(data.categories || []);
+        setPriorities(data.priorities || []);
+        setForm((prev) => ({
+          ...prev,
+          categoryId: data.categories?.[0]?.id?.toString() || '',
+          priorityId: data.priorities?.[1]?.id?.toString() || '',
+        }));
+      } catch (err) {
+        console.error('Failed to load ticket lookups', err);
+        setError('Could not load categories and priorities.');
+      }
+    };
+
+    loadLookups();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => navigate('/tickets/1'), 1200);
+    if (!form.title.trim() || !form.description.trim() || !form.categoryId || !form.priorityId) {
+      setError('Please fill in the required fields.');
+      return;
+    }
+
+    setCreating(true);
+    setError('');
+    try {
+      const { data } = await ticketsApi.create({
+        title: form.title.trim(),
+        description: form.description.trim(),
+        categoryId: Number(form.categoryId),
+        priorityId: Number(form.priorityId),
+      });
+      setCreatedReference(data.referenceNumber || '');
+      window.dispatchEvent(new Event('notifications-updated'));
+      setSubmitted(true);
+      setTimeout(() => navigate(`/tickets/${data.id}`), 1200);
+    } catch (err) {
+      console.error('Ticket creation failed', err);
+      setError('Could not create the ticket. Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const askAi = async (e) => {
+    e.preventDefault();
+    if (!aiQuestion.trim()) return;
+
+    setAskingAi(true);
+    setAiError('');
+    setAiAnswer('');
+
+    try {
+      const { data } = await aiApi.chat(aiQuestion.trim());
+      setAiAnswer(data.answer || '');
+    } catch (err) {
+      console.error('AI assistant request failed', err);
+      setAiError('Unable to reach the AI assistant right now.');
+    } finally {
+      setAskingAi(false);
+    }
   };
 
   if (submitted) {
     return (
       <div className="card success-card">
         <h2>✓ Ticket created</h2>
-        <p>Reference <strong>TKT-2026-00043</strong> — redirecting…</p>
+        <p>Reference <strong>{createdReference || 'New ticket'}</strong> — redirecting…</p>
       </div>
     );
   }
@@ -40,10 +115,26 @@ export default function CreateTicket() {
 
       <div className="card ai-hint">
         <strong>💬 AI assistant</strong> — Ask a quick question before opening a ticket, e.g. &quot;How do I connect to VPN?&quot;
-        <input type="text" className="filter-input" placeholder="Ask a question…" style={{ marginTop: 10 }} />
+        <form onSubmit={askAi} style={{ marginTop: 10 }}>
+          <div className="form-row">
+            <input
+              type="text"
+              className="filter-input"
+              placeholder="Ask a question…"
+              value={aiQuestion}
+              onChange={(e) => setAiQuestion(e.target.value)}
+            />
+            <button type="submit" className="btn btn-secondary" disabled={askingAi}>
+              {askingAi ? 'Asking…' : 'Ask'}
+            </button>
+          </div>
+        </form>
+        {aiAnswer && <p className="text-muted" style={{ marginTop: 10 }}>{aiAnswer}</p>}
+        {aiError && <p className="text-muted" style={{ marginTop: 10 }}>{aiError}</p>}
       </div>
 
       <form className="card form-card" onSubmit={handleSubmit}>
+        {error && <p className="text-muted" style={{ marginBottom: 12 }}>{error}</p>}
         <div className="form-group">
           <label>Title *</label>
           <input value={form.title} onChange={set('title')} required placeholder="Brief summary" />
@@ -55,14 +146,14 @@ export default function CreateTicket() {
         <div className="form-row">
           <div className="form-group">
             <label>Category *</label>
-            <select value={form.category} onChange={set('category')}>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            <select value={form.categoryId} onChange={set('categoryId')}>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label>Priority</label>
-            <select value={form.priority} onChange={set('priority')}>
-              {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            <select value={form.priorityId} onChange={set('priorityId')}>
+              {priorities.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
         </div>
@@ -71,7 +162,9 @@ export default function CreateTicket() {
           <input type="file" multiple />
         </div>
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary">Submit ticket</button>
+          <button type="submit" className="btn btn-primary" disabled={creating}>
+            {creating ? 'Creating…' : 'Submit ticket'}
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => navigate('/tickets')}>Cancel</button>
         </div>
       </form>

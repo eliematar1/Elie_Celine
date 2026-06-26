@@ -1,19 +1,44 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AppRoles } from '../constants/roles';
-
-const nav = [
-  { to: '/dashboard', label: 'Dashboard', icon: '▣' },
-  { to: '/tickets', label: 'Tickets', icon: '☰' },
-  { to: '/tickets/new', label: 'Create Ticket', icon: '＋' },
-  { to: '/notifications', label: 'Notifications', icon: '🔔', badge: 3 },
-  { to: '/reports', label: 'Reports', icon: '◫' },
-  { to: '/profile', label: 'Profile', icon: '👤' },
-];
+import { notificationsApi } from '../services/ticketsApi';
 
 export default function AppLayout() {
   const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const refreshUnreadCount = async () => {
+      try {
+        const { data } = await notificationsApi.unreadCount();
+        setUnreadCount(data.count ?? 0);
+      } catch (error) {
+        console.error('Failed to load unread count', error);
+      }
+    };
+
+    refreshUnreadCount();
+    const intervalId = window.setInterval(refreshUnreadCount, 15000);
+    const onNotificationsUpdated = () => refreshUnreadCount();
+    window.addEventListener('notifications-updated', onNotificationsUpdated);
+    window.addEventListener('focus', onNotificationsUpdated);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('notifications-updated', onNotificationsUpdated);
+      window.removeEventListener('focus', onNotificationsUpdated);
+    };
+  }, []);
+
+  const nav = [
+    { to: '/dashboard', label: 'Dashboard', icon: '▣' },
+    { to: '/tickets', label: 'Tickets', icon: '☰' },
+    { to: '/tickets/new', label: 'Create Ticket', icon: '＋' },
+    { to: '/notifications', label: 'Notifications', icon: '🔔', badge: unreadCount > 0 ? unreadCount : null },
+    { to: '/reports', label: 'Reports', icon: '◫' },
+    { to: '/profile', label: 'Profile', icon: '👤' },
+  ];
 
   return (
     <div className="app-shell">
@@ -61,7 +86,9 @@ export default function AppLayout() {
             <input type="search" placeholder="Search tickets, reference #…" className="search-input" />
           </div>
           <div className="topbar-actions">
-            <NavLink to="/notifications" className="topbar-btn" title="Notifications">🔔</NavLink>
+            <NavLink to="/notifications" className="topbar-btn" title="Notifications">
+              🔔{unreadCount > 0 ? <span className="nav-badge">{unreadCount}</span> : null}
+            </NavLink>
             <div className="topbar-user">
               <span className="avatar sm">{user?.firstName?.[0]}{user?.lastName?.[0]}</span>
               <span>{user?.firstName}</span>

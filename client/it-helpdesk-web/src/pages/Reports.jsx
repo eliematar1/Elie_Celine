@@ -1,7 +1,53 @@
+import { useEffect, useState } from 'react';
 import StatCard from '../components/StatCard';
-import { STATS } from '../data/mockData';
+import { reportsApi } from '../services/ticketsApi';
 
 export default function Reports() {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    reportsApi.get().then((res) => setData(res.data)).catch(() => {});
+  }, []);
+
+  const exportCsv = async () => {
+    try {
+      const res = await reportsApi.exportCsv();
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tickets-report.csv';
+      a.click();
+    } catch (err) {
+      console.error('CSV export failed:', err);
+    }
+  };
+
+  const exportPdf = async () => {
+    try {
+      const res = await reportsApi.exportPdf();
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tickets-report.pdf';
+      a.click();
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    }
+  };
+
+  const exportExcel = async () => {
+    try {
+      const res = await reportsApi.exportExcel();
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tickets-report.xlsx';
+      a.click();
+    } catch (err) {
+      console.error('Excel export failed:', err);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -10,35 +56,37 @@ export default function Reports() {
           <p className="page-sub">Monthly metrics and agent performance</p>
         </div>
         <div className="btn-group">
-          <button type="button" className="btn btn-secondary">Export PDF</button>
-          <button type="button" className="btn btn-secondary">Export Excel</button>
+          <button type="button" className="btn btn-secondary" onClick={exportCsv}>CSV</button>
+          <button type="button" className="btn btn-secondary" onClick={exportPdf}>PDF</button>
+          <button type="button" className="btn btn-secondary" onClick={exportExcel}>Excel</button>
         </div>
       </div>
 
-      <div className="card filters-card">
-        <input type="date" className="filter-input" />
-        <input type="date" className="filter-input" />
-        <button type="button" className="btn btn-primary">Apply</button>
-      </div>
-
-      <div className="stats-grid">
-        <StatCard label="Avg. resolution" value="4.2d" icon="⏱" />
-        <StatCard label="SLA met" value="94%" icon="✓" accent="accent-green" />
-        <StatCard label="Total this month" value={STATS.resolvedMonth + STATS.open} icon="📊" />
-      </div>
-
-      <div className="card">
-        <h3 className="card-title">Agent performance</h3>
-        <table className="data-table">
-          <thead>
-            <tr><th>Agent</th><th>Resolved</th><th>Open</th><th>Avg. time</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>J. Smith</td><td>45</td><td>3</td><td>3.1 days</td></tr>
-            <tr><td>A. Lee</td><td>38</td><td>5</td><td>4.8 days</td></tr>
-          </tbody>
-        </table>
-      </div>
+      {data && (
+        <>
+          <div className="stats-grid">
+            <StatCard label="Total tickets" value={data.totalTickets} icon="📊" />
+            <StatCard label="Resolved" value={data.resolvedTickets} icon="✓" accent="accent-green" />
+            <StatCard label="Avg. resolution" value={`${data.avgResolutionDays}d`} icon="⏱" />
+          </div>
+          <div className="card">
+            <h3 className="card-title">Agent performance</h3>
+            <table className="data-table">
+              <thead><tr><th>Agent</th><th>Resolved</th><th>Open</th><th>Avg. time</th></tr></thead>
+              <tbody>
+                {(data.agentPerformance || []).map((a) => (
+                  <tr key={a.agentName}>
+                    <td>{a.agentName}</td>
+                    <td>{a.resolved}</td>
+                    <td>{a.open}</td>
+                    <td>{a.avgDays} days</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </>
   );
 }

@@ -7,7 +7,7 @@ namespace ITHelpDesk.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = AppRoles.Admin)]
+[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
@@ -15,6 +15,7 @@ public class UsersController : ControllerBase
     public UsersController(UserManager<ApplicationUser> userManager) => _userManager = userManager;
 
     [HttpGet]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> List()
     {
         var users = _userManager.Users.OrderBy(u => u.Email).ToList();
@@ -39,4 +40,24 @@ public class UsersController : ControllerBase
 
     [HttpGet("roles")]
     public IActionResult Roles() => Ok(AppRoles.All);
+
+    [HttpGet("agents")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent},{AppRoles.Manager}")]
+    public async Task<IActionResult> Agents()
+    {
+        var agents = await _userManager.GetUsersInRoleAsync(AppRoles.Agent);
+        var result = agents
+            .Where(u => u.IsActive)
+            .OrderBy(u => u.FirstName)
+            .ThenBy(u => u.LastName)
+            .Select(u => new
+            {
+                u.Id,
+                Name = string.Join(' ', new[] { u.FirstName, u.LastName }.Where(x => !string.IsNullOrWhiteSpace(x))),
+                u.Email,
+                u.Department
+            });
+
+        return Ok(result);
+    }
 }

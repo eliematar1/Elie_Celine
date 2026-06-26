@@ -89,6 +89,14 @@ public class TicketsController : ControllerBase
 
         await _tickets.LogStatusChangeAsync(ticket, null, openStatus.Id, user.Id, "Ticket created");
         await _db.SaveChangesAsync();
+
+        var recipientIds = new List<string> { user.Id };
+        foreach (var recipient in (await _userManager.GetUsersInRoleAsync(AppRoles.Admin)).Concat(await _userManager.GetUsersInRoleAsync(AppRoles.Manager)).Concat(await _userManager.GetUsersInRoleAsync(AppRoles.Agent)))
+            if (recipient.Id != user.Id && !recipientIds.Contains(recipient.Id)) recipientIds.Add(recipient.Id);
+
+        foreach (var recipientId in recipientIds)
+            await _notifications.NotifyAsync(recipientId, "New ticket created", $"{ticket.ReferenceNumber} was created and is awaiting review.", "TicketCreated", ticket.Id);
+
         await _activity.LogAsync(user.Id, "TicketCreated", "Ticket", ticket.Id.ToString(), ticket.ReferenceNumber);
 
         return CreatedAtAction(nameof(Get), new { id = ticket.Id }, await GetDto(ticket.Id, user, roles));
@@ -109,9 +117,20 @@ public class TicketsController : ControllerBase
         if (request.StatusId.HasValue && request.StatusId != ticket.StatusId)
         {
             var fromId = ticket.StatusId;
+            var toStatus = await _db.TicketStatuses.FindAsync(request.StatusId.Value);
             await _tickets.LogStatusChangeAsync(ticket, fromId, request.StatusId.Value, user.Id);
-            await _notifications.NotifyAsync(ticket.CreatedByUserId, "Status updated",
-                $"{ticket.ReferenceNumber} status changed.", "StatusChange", ticket.Id);
+
+            var recipientIds = new List<string>();
+            if (!string.IsNullOrWhiteSpace(ticket.CreatedByUserId) && ticket.CreatedByUserId != user.Id) recipientIds.Add(ticket.CreatedByUserId);
+            if (!string.IsNullOrWhiteSpace(ticket.AssignedToUserId) && ticket.AssignedToUserId != user.Id) recipientIds.Add(ticket.AssignedToUserId);
+
+            var title = toStatus?.Name is "Resolved" or "Closed" ? "Ticket completed" : "Status updated";
+            var message = toStatus?.Name is "Resolved" or "Closed"
+                ? $"{ticket.ReferenceNumber} has been marked {toStatus.Name}."
+                : $"{ticket.ReferenceNumber} status changed to {toStatus?.Name ?? request.StatusId.Value.ToString()}.";
+
+            foreach (var recipientId in recipientIds.Distinct())
+                await _notifications.NotifyAsync(recipientId, title, message, "StatusChange", ticket.Id);
         }
         else ticket.UpdatedAt = DateTime.UtcNow;
 
@@ -176,9 +195,12 @@ public class TicketsController : ControllerBase
         });
         await _db.SaveChangesAsync();
 
-        if (ticket.CreatedByUserId != user.Id)
-            await _notifications.NotifyAsync(ticket.CreatedByUserId, "New comment",
-                $"New comment on {ticket.ReferenceNumber}.", "Comment", id);
+        var recipientIds = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ticket.CreatedByUserId) && ticket.CreatedByUserId != user.Id) recipientIds.Add(ticket.CreatedByUserId);
+        if (!string.IsNullOrWhiteSpace(ticket.AssignedToUserId) && ticket.AssignedToUserId != user.Id) recipientIds.Add(ticket.AssignedToUserId);
+
+        foreach (var recipientId in recipientIds.Distinct())
+            await _notifications.NotifyAsync(recipientId, "New comment", $"New comment on {ticket.ReferenceNumber}.", "Comment", id);
 
         return Ok(new { message = "Comment added." });
     }

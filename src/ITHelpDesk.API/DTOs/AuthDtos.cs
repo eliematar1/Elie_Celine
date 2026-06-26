@@ -31,3 +31,14 @@ public record UserProfileDto(
     string? Department,
     IReadOnlyList<string> Roles
 );
+
+public record UpdateProfileRequest(
+    [Required] string FirstName,
+    [Required] string LastName,
+    string? Department
+);
+
+public record ChangePasswordRequest(
+    [Required] string CurrentPassword,
+    [Required][MinLength(6)] string NewPassword
+);
