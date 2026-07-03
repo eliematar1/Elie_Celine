@@ -10,6 +10,12 @@ export default function Login() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const fillDemo = (demoEmail, demoPassword) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setError('');
+  };
+
   if (user) return <Navigate to="/dashboard" replace />;
 
   const handleSubmit = async (e) => {
@@ -49,8 +55,18 @@ export default function Login() {
           No account? <Link to="/register">Register</Link>
         </p>
         <p style={{ marginTop: 8, fontSize: '.8rem', color: '#94a3b8', textAlign: 'center' }}>
-          Demo: admin@ithelpdesk.local / Admin@123<br />
-          agent@ithelpdesk.local / Agent@123 · employee@ithelpdesk.local / Employee@123
+          Demo (click to fill):<br />
+          <button type="button" className="link-btn" onClick={() => fillDemo('admin@ithelpdesk.local', 'Admin@123')}>
+            admin@ithelpdesk.local / Admin@123
+          </button>
+          <br />
+          <button type="button" className="link-btn" onClick={() => fillDemo('agent@ithelpdesk.local', 'Agent@123')}>
+            agent@ithelpdesk.local / Agent@123
+          </button>
+          <br />
+          <button type="button" className="link-btn" onClick={() => fillDemo('employee@ithelpdesk.local', 'Employee@123')}>
+            employee@ithelpdesk.local / Employee@123
+          </button>
         </p>
       </div>
     </div>

@@ -51,4 +51,21 @@ public class NotificationsController : ControllerBase
         var count = await _db.Notifications.CountAsync(n => n.UserId == user!.Id && !n.IsRead);
         return Ok(new { count });
     }
+
+    [HttpGet("poll")]
+    public async Task<IActionResult> Poll([FromQuery] string? since)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        var q = _db.Notifications.Where(n => n.UserId == user!.Id);
+        var unread = await q.CountAsync(n => !n.IsRead);
+        if (!string.IsNullOrEmpty(since) && DateTime.TryParse(since, out var sinceDt))
+            q = q.Where(n => n.CreatedAt > sinceDt);
+        else
+            q = q.Where(n => !n.IsRead);
+
+        var items = await q.OrderByDescending(n => n.CreatedAt).Take(10)
+            .Select(n => new { n.Id, n.Title, n.Message, n.Type, n.TicketId, n.IsRead, n.CreatedAt })
+            .ToListAsync();
+        return Ok(new { count = unread, items });
+    }
 }

@@ -52,7 +52,44 @@ public class ReportsController : ControllerBase
             perf.Add(new AgentPerformanceDto($"{agent.FirstName} {agent.LastName}", res, open, Math.Round(avg, 1)));
         }
 
-        return Ok(new ReportDto(total, resolved, Math.Round(avgDays, 1), perf));
+        var tickets = await q.ToListAsync();
+        var byCategory = tickets
+            .GroupBy(t => t.Category.Name)
+            .Select(g => new CategoryCountDto(g.Key, g.Count()))
+            .OrderByDescending(x => x.Count)
+            .ToList();
+        var byPriority = tickets
+            .GroupBy(t => t.Priority.Name)
+            .Select(g => new PriorityCountDto(g.Key, g.Count()))
+            .OrderByDescending(x => x.Count)
+            .ToList();
+        var byStatus = tickets
+            .GroupBy(t => t.Status.Name)
+            .Select(g => new StatusCountDto(g.Key, g.Count()))
+            .OrderByDescending(x => x.Count)
+            .ToList();
+
+        var monthlyTrend = new List<MonthlyTrendDto>();
+        for (var i = 5; i >= 0; i--)
+        {
+            var month = DateTime.UtcNow.AddMonths(-i);
+            var monthStart = new DateTime(month.Year, month.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var monthEnd = monthStart.AddMonths(1);
+            var label = monthStart.ToString("MMM yyyy");
+            var created = tickets.Count(t => t.CreatedAt >= monthStart && t.CreatedAt < monthEnd);
+            var resolved = tickets.Count(t => t.ResolvedAt >= monthStart && t.ResolvedAt < monthEnd);
+            monthlyTrend.Add(new MonthlyTrendDto(label, created, resolved));
+        }
+
+        return Ok(new ReportDto(
+            total,
+            resolved,
+            Math.Round(avgDays, 1),
+            perf,
+            byCategory,
+            byPriority,
+            byStatus,
+            monthlyTrend));
     }
 
     [HttpGet("export/csv")]

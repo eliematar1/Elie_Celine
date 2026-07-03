@@ -36,4 +36,8 @@ export const authApi = {
 export const usersApi = {
   list: () => api.get('/api/users'),
   roles: () => api.get('/api/users/roles'),
+  create: (data) => api.post('/api/users', data),
+  setStatus: (id, isActive) => api.patch(`/api/users/${id}/status`, { isActive }),
+  remove: (id) => api.delete(`/api/users/${id}`),
+  agents: () => api.get('/api/users/agents'),
 };

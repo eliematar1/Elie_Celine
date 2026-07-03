@@ -124,6 +124,38 @@ function notify(userId, title, message, type = 'System', ticketId = null) {
   });
 }
 
+function getTicketInvolvedUserIds(ticketId, excludeUserId = null) {
+  const ticket = tickets.find((t) => t.id === ticketId);
+  if (!ticket) return [];
+  const ids = new Set();
+  if (ticket.createdByUserId) ids.add(ticket.createdByUserId);
+  if (ticket.assignedToUserId) ids.add(ticket.assignedToUserId);
+  for (const a of assignments.filter((x) => x.ticketId === ticketId)) {
+    ids.add(a.assignedToUserId);
+    ids.add(a.assignedByUserId);
+  }
+  for (const c of comments.filter((x) => x.ticketId === ticketId)) {
+    ids.add(c.userId);
+  }
+  if (excludeUserId) ids.delete(excludeUserId);
+  return [...ids];
+}
+
+function notifyInvolved(ticketId, title, message, type, actorUserId = null) {
+  for (const uid of getTicketInvolvedUserIds(ticketId, actorUserId)) {
+    notify(uid, title, message, type, ticketId);
+  }
+}
+
+function notifyStaffNewTicket(ticket, actorUserId) {
+  for (const u of users) {
+    if (!u.isActive || u.id === actorUserId) continue;
+    if (hasRole(u, ROLES.Admin) || hasRole(u, ROLES.Agent)) {
+      notify(u.id, 'New ticket', `${ticket.referenceNumber}: ${ticket.title}`, 'TicketCreated', ticket.id);
+    }
+  }
+}
+
 function getCategory(id) {
   return categories.find((c) => c.id === id);
 }
@@ -175,7 +207,118 @@ function mapTicketList(t) {
   };
 }
 
-function mapTicketDetail(t, userRoles) {
+const WORKING_STATUSES = new Set(['In Progress', 'Pending']);
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+function getTicketState(ticket) {
+  const st = getStatus(ticket.statusId);
+  const statusName = st?.name ?? '';
+  return {
+    statusName,
+    isClosed: st?.isClosed || statusName === 'Resolved' || statusName === 'Closed',
+    isWorking: WORKING_STATUSES.has(statusName),
+    isOpen: statusName === 'Open',
+    isUnassigned: !ticket.assignedToUserId,
+  };
+}
+
+function getTicketPermissions(ticket, user, roles) {
+  const state = getTicketState(ticket);
+  const isAdmin = hasRole(user, ROLES.Admin);
+  const isAgent = hasRole(user, ROLES.Agent);
+  const isStaff = isAdmin || isAgent;
+  const isOwner = ticket.createdByUserId === user.id;
+
+  if (state.isClosed) {
+    return {
+      isReadOnly: true,
+      canEditDetails: false,
+      canDelete: false,
+      canAssign: false,
+      canComment: false,
+      canUpload: false,
+      canChangeStatus: false,
+      canReopen: isStaff,
+      canDuplicate: true,
+      canEscalate: false,
+    };
+  }
+  if (state.isWorking) {
+    return {
+      isReadOnly: false,
+      canEditDetails: false,
+      canDelete: false,
+      canAssign: isStaff,
+      canComment: true,
+      canUpload: true,
+      canChangeStatus: isStaff,
+      canReopen: false,
+      canDuplicate: true,
+      canEscalate: isAdmin,
+    };
+  }
+  return {
+    isReadOnly: false,
+    canEditDetails: isAdmin || isOwner,
+    canDelete: isAdmin && state.isUnassigned && state.isOpen,
+    canAssign: isStaff,
+    canComment: true,
+    canUpload: true,
+    canChangeStatus: isStaff,
+    canReopen: false,
+    canDuplicate: true,
+    canEscalate: false,
+  };
+}
+
+function buildTimeline(ticket, ticketComments, ticketAttachments, ticketAssignments, ticketHistory) {
+  const events = [];
+  for (const h of ticketHistory) {
+    const from = h.fromStatusId ? getStatus(h.fromStatusId)?.name ?? '—' : '—';
+    const to = getStatus(h.toStatusId)?.name ?? '';
+    const actor = fullName(findUser(h.changedByUserId));
+    events.push({
+      type: 'status',
+      title: `Status: ${from} → ${to}`,
+      detail: h.notes ?? '',
+      actorName: actor,
+      at: h.changedAt,
+    });
+  }
+  for (const a of ticketAssignments) {
+    const to = fullName(findUser(a.assignedToUserId));
+    const by = fullName(findUser(a.assignedByUserId));
+    events.push({
+      type: 'assignment',
+      title: a.isEscalation ? 'Escalated' : 'Assigned',
+      detail: `To ${to}`,
+      actorName: by,
+      at: a.assignedAt,
+    });
+  }
+  for (const c of ticketComments) {
+    events.push({
+      type: 'comment',
+      title: c.isInternal ? 'Internal note' : 'Comment',
+      detail: c.body,
+      actorName: c.authorName,
+      at: c.createdAt,
+    });
+  }
+  for (const a of ticketAttachments) {
+    events.push({
+      type: 'attachment',
+      title: 'Attachment added',
+      detail: a.fileName,
+      actorName: a.uploadedByName ?? '',
+      at: a.uploadedAt,
+    });
+  }
+  return events.sort((x, y) => new Date(x.at) - new Date(y.at));
+}
+
+function mapTicketDetail(t, user, userRoles) {
   const cat = getCategory(t.categoryId);
   const pri = getPriority(t.priorityId);
   const st = getStatus(t.statusId);
@@ -199,22 +342,47 @@ function mapTicketDetail(t, userRoles) {
 
   const ticketAttachments = attachments
     .filter((a) => a.ticketId === t.id)
+    .map((a) => {
+      const uploader = findUser(a.uploadedByUserId);
+      return {
+        id: a.id,
+        fileName: a.fileName,
+        fileSizeBytes: a.fileSizeBytes,
+        uploadedAt: a.uploadedAt,
+        uploadedByName: fullName(uploader),
+      };
+    });
+
+  const ticketAssignments = assignments
+    .filter((a) => a.ticketId === t.id)
     .map((a) => ({
-      id: a.id,
-      fileName: a.fileName,
-      fileSizeBytes: a.fileSizeBytes,
-      uploadedAt: a.uploadedAt,
+      assignedToName: fullName(findUser(a.assignedToUserId)),
+      assignedByName: fullName(findUser(a.assignedByUserId)),
+      assignedAt: a.assignedAt,
+      isEscalation: a.isEscalation,
+      notes: a.notes,
     }));
 
   const ticketHistory = statusHistory
     .filter((h) => h.ticketId === t.id)
-    .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))
     .map((h) => ({
       fromStatus: h.fromStatusId ? getStatus(h.fromStatusId)?.name ?? null : null,
       toStatus: getStatus(h.toStatusId)?.name ?? '',
-      changedByName: '',
+      changedByName: fullName(findUser(h.changedByUserId)),
       changedAt: h.changedAt,
+      notes: h.notes,
     }));
+
+  const end = t.closedAt || t.resolvedAt;
+  const resolutionHours = end
+    ? Math.round(((new Date(end) - new Date(t.createdAt)) / 3600000) * 10) / 10
+    : null;
+  const agentsInvolved = new Set(
+    assignments.filter((a) => a.ticketId === t.id).map((a) => a.assignedToUserId)
+  ).size;
+
+  const permissions = getTicketPermissions(t, user, userRoles);
+  const timeline = buildTimeline(t, ticketComments, ticketAttachments, ticketAssignments, statusHistory.filter((h) => h.ticketId === t.id));
 
   return {
     id: t.id,
@@ -231,10 +399,17 @@ function mapTicketDetail(t, userRoles) {
     assignedToName: fullName(assigned),
     assignedToUserId: t.assignedToUserId,
     createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
     resolvedAt: t.resolvedAt,
+    closedAt: t.closedAt,
+    resolutionHours,
+    agentsInvolved,
     comments: ticketComments,
     attachments: ticketAttachments,
-    statusHistory: ticketHistory,
+    statusHistory: ticketHistory.sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt)),
+    assignmentHistory: ticketAssignments.sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt)),
+    timeline,
+    permissions,
   };
 }
 
@@ -295,6 +470,144 @@ function aiChatAnswer(question) {
   if (q.includes('password')) return 'Reset password via https://password.company.com or contact IT help desk.';
   if (q.includes('wifi')) return 'Connect to CORP-WIFI using your employee credentials.';
   return 'I can help with VPN, password reset, and Wi-Fi. For other issues, please create a support ticket.';
+}
+
+function aiParseTicketShortcut(shortcut) {
+  const text = (shortcut || '').trim();
+  if (!text) return null;
+
+  let remaining = text;
+  let category = null;
+  let priority = null;
+  let dueNote = '';
+
+  for (const name of categories.map((c) => c.name)) {
+    const re = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (re.test(remaining)) {
+      category = name;
+      remaining = remaining.replace(re, '').trim();
+      break;
+    }
+  }
+
+  for (const name of priorities.map((p) => p.name)) {
+    const re = new RegExp(`^${name}\\b`, 'i');
+    if (re.test(remaining)) {
+      priority = name;
+      remaining = remaining.replace(re, '').trim();
+      break;
+    }
+  }
+
+  if (!priority) {
+    if (/\b(critical|emergency|server down|outage)\b/i.test(text)) priority = 'Critical';
+    else if (/\b(urgent|asap|high priority|cannot work)\b/i.test(text)) priority = 'High';
+    else if (/\b(low|minor|when possible)\b/i.test(text)) priority = 'Low';
+    else priority = 'Medium';
+  }
+
+  const dateLead = remaining.match(
+    /^(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b/i,
+  );
+  if (dateLead) {
+    dueNote = `\n\nRequested deadline: ${dateLead[1]}`;
+    remaining = remaining.replace(dateLead[0], '').trim();
+  }
+
+  const dueMatch = text.match(/\b(by|before|due)\s+([^.!?\n]+)/i);
+  if (dueMatch) dueNote = `\n\nRequested deadline: ${dueMatch[2].trim()}`;
+
+  if (!category) category = aiSuggest(remaining || text, text).category;
+
+  const issue = (remaining || text).trim();
+  const firstLine = issue.split(/[.!?\n]/)[0].trim();
+  const title = firstLine.length > 100 ? `${firstLine.slice(0, 97)}...` : firstLine;
+
+  return {
+    title: title || 'Support request',
+    description: text + dueNote,
+    category,
+    priority,
+  };
+}
+
+function aiHelpChat(question) {
+  const q = (question || '').toLowerCase();
+  const nextSteps = [];
+  let suggestCreateTicket = false;
+
+  if (q.includes('vpn')) {
+    return {
+      answer: 'For VPN issues, verify Cisco AnyConnect is installed and you are on a stable internet connection.',
+      nextSteps: [
+        'Open Cisco AnyConnect and enter vpn.company.com',
+        'Sign in with your AD / employee credentials',
+        'If it fails, note the exact error message for IT',
+        'Try disconnecting and reconnecting Wi-Fi',
+      ],
+      suggestCreateTicket: q.includes('still') || q.includes('not work') || q.includes("doesn't"),
+    };
+  }
+  if (q.includes('password') || q.includes('login') || q.includes('locked')) {
+    return {
+      answer: 'Password and login problems are usually fixed via self-service reset or IT unlock.',
+      nextSteps: [
+        'Go to https://password.company.com to reset your password',
+        'Wait 5 minutes after reset before trying again',
+        'Ensure Caps Lock is off',
+        'If account is locked, contact IT help desk',
+      ],
+      suggestCreateTicket: q.includes('locked') || q.includes('still'),
+    };
+  }
+  if (q.includes('email') || q.includes('outlook')) {
+    return {
+      answer: 'Email/Outlook issues often relate to sync, credentials, or mailbox size.',
+      nextSteps: [
+        'Restart Outlook and check your internet connection',
+        'Send/receive: click Send/Receive All Folders',
+        'Check webmail at https://mail.company.com',
+        'Note when the issue started and any error text',
+      ],
+      suggestCreateTicket: true,
+    };
+  }
+  if (q.includes('printer')) {
+    return {
+      answer: 'Printer problems are commonly driver, queue, or network related.',
+      nextSteps: [
+        'Confirm the printer is online and has paper/toner',
+        'Clear stuck jobs in the print queue',
+        'Try printing a test page from Windows Settings',
+        'Note printer name and location',
+      ],
+      suggestCreateTicket: true,
+    };
+  }
+  if (q.includes('ticket') || q.includes('create') || q.includes('report')) {
+    return {
+      answer: 'To report an issue, use Create Ticket or the AI Quick Ticket shortcut on the create page.',
+      nextSteps: [
+        'Go to Create Ticket in the sidebar',
+        'Use AI Quick Ticket for a one-line description',
+        'Or fill the form manually with title, category, and priority',
+        'You will receive notifications when IT updates your ticket',
+      ],
+      suggestCreateTicket: false,
+    };
+  }
+
+  suggestCreateTicket = true;
+  return {
+    answer: 'I am your IT Help Desk assistant. I can guide you through common fixes before you open a ticket.',
+    nextSteps: [
+      'Describe what you were doing when the problem started',
+      'Check if coworkers have the same issue',
+      'Try a restart of the app or your PC',
+      'If unresolved, create a support ticket with details',
+    ],
+    suggestCreateTicket,
+  };
 }
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
@@ -419,6 +732,16 @@ async function seed() {
   notify(agent.id, 'Ticket assigned', 'You were assigned TKT-' + year + '-00002.', 'Assignment', 2);
   notify(emp.id, 'Ticket update', 'Your ticket TKT-' + year + '-00002 is now In Progress.', 'StatusChange', 2);
   notify(emp.id, 'Welcome', 'Welcome to IT Help Desk. Create a ticket anytime you need support.', 'System', null);
+
+  assignments.push({
+    id: nextAssignmentId++,
+    ticketId: 2,
+    assignedToUserId: agent.id,
+    assignedByUserId: users.find((u) => u.email === 'admin@ithelpdesk.local')?.id ?? '1',
+    assignedAt: new Date(now.getTime() - 172000000).toISOString(),
+    notes: 'Initial assignment',
+    isEscalation: false,
+  });
 }
 
 // ── Middleware ──────────────────────────────────────────────────────────────────
@@ -459,7 +782,7 @@ const upload = multer({
       cb(null, `${crypto.randomUUID()}${ext}`);
     },
   }),
-  limits: { fileSize: 10_485_760 },
+  limits: { fileSize: MAX_ATTACHMENT_BYTES },
 });
 
 // ── App setup ─────────────────────────────────────────────────────────────────
@@ -481,9 +804,12 @@ app.get('/api/health', (_req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   await seed();
   const { email, password } = req.body || {};
-  const user = users.find((u) => u.email === email && u.isActive);
+  const user = users.find((u) => u.email === email);
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     return res.status(401).json({ message: 'Invalid email or password.' });
+  }
+  if (!user.isActive) {
+    return res.status(403).json({ message: 'This account has been deactivated. Contact your administrator.' });
   }
   user.lastLoginAt = new Date().toISOString();
   logActivity(user.id, 'UserLogin', 'User', user.id);
@@ -494,7 +820,8 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   await seed();
   const { email, password, firstName, lastName, department, role } = req.body || {};
-  if (!ALL_ROLES.includes(role)) return res.status(400).json({ message: 'Invalid role.' });
+  const publicRoles = [ROLES.Employee, ROLES.Agent, ROLES.Manager];
+  if (!publicRoles.includes(role)) return res.status(400).json({ message: 'Invalid role.' });
   if (users.some((u) => u.email === email)) {
     return res.status(400).json({ message: 'Email already registered.' });
   }
@@ -579,6 +906,109 @@ app.get('/api/users/roles', authMiddleware, requireRoles(ROLES.Admin), (_req, re
   res.json(ALL_ROLES);
 });
 
+app.get('/api/users/agents', authMiddleware, requireRoles(ROLES.Admin, ROLES.Agent), (_req, res) => {
+  const result = users
+    .filter((u) => u.isActive && hasRole(u, ROLES.Agent))
+    .map((u) => ({
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      email: u.email,
+    }));
+  res.json(result);
+});
+
+app.post('/api/users', authMiddleware, requireRoles(ROLES.Admin), async (req, res) => {
+  await seed();
+  const { email, password, firstName, lastName, department, role } = req.body || {};
+  if (!ALL_ROLES.includes(role)) return res.status(400).json({ message: 'Invalid role.' });
+  if (!email || !password || !firstName || !lastName) {
+    return res.status(400).json({ message: 'Email, password, first name, and last name are required.' });
+  }
+  if (users.some((u) => u.email === email)) {
+    return res.status(400).json({ message: 'Email already registered.' });
+  }
+
+  const user = {
+    id: String(nextUserId++),
+    email,
+    passwordHash: await bcrypt.hash(password, 10),
+    firstName,
+    lastName,
+    department: department || null,
+    roles: [role],
+    isActive: true,
+    lastLoginAt: null,
+  };
+  users.push(user);
+  logActivity(req.user.id, 'UserCreated', 'User', user.id, `Role: ${role}`);
+
+  res.status(201).json({
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    department: user.department,
+    isActive: user.isActive,
+    roles: user.roles,
+    lastLoginAt: user.lastLoginAt,
+  });
+});
+
+app.patch('/api/users/:id/status', authMiddleware, requireRoles(ROLES.Admin), async (req, res) => {
+  await seed();
+  const user = users.find((u) => u.id === req.params.id);
+  if (!user) return res.status(404).json({ message: 'User not found.' });
+
+  const { isActive } = req.body || {};
+  if (typeof isActive !== 'boolean') {
+    return res.status(400).json({ message: 'isActive (boolean) is required.' });
+  }
+  if (req.user.id === user.id && !isActive) {
+    return res.status(400).json({ message: 'You cannot deactivate your own account.' });
+  }
+
+  user.isActive = isActive;
+  logActivity(req.user.id, isActive ? 'UserActivated' : 'UserDeactivated', 'User', user.id);
+
+  res.json({
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    department: user.department,
+    isActive: user.isActive,
+    roles: user.roles,
+    lastLoginAt: user.lastLoginAt,
+  });
+});
+
+app.delete('/api/users/:id', authMiddleware, requireRoles(ROLES.Admin), async (req, res) => {
+  await seed();
+  const idx = users.findIndex((u) => u.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ message: 'User not found.' });
+  if (req.user.id === req.params.id) {
+    return res.status(400).json({ message: 'You cannot delete your own account.' });
+  }
+
+  const user = users[idx];
+  const hasHistory =
+    user.lastLoginAt != null ||
+    tickets.some((t) => t.createdByUserId === user.id || t.assignedToUserId === user.id) ||
+    comments.some((c) => c.userId === user.id) ||
+    assignments.some((a) => a.assignedToUserId === user.id || a.assignedByUserId === user.id);
+
+  if (hasHistory) {
+    return res.status(400).json({
+      message: 'User has activity history. Deactivate the account instead of deleting.',
+    });
+  }
+
+  users.splice(idx, 1);
+  logActivity(req.user.id, 'UserDeleted', 'User', user.id);
+  res.status(204).send();
+});
+
 // ── Tickets — lookups BEFORE :id routes ───────────────────────────────────────
 app.get('/api/tickets/lookups', (_req, res) => {
   res.json({
@@ -612,7 +1042,7 @@ app.get('/api/tickets/:id', authMiddleware, (req, res) => {
   const id = Number(req.params.id);
   const ticket = getTicketForUser(id, req.user);
   if (!ticket) return res.status(404).json({ message: 'Not found' });
-  res.json(mapTicketDetail(ticket, req.userRoles));
+  res.json(mapTicketDetail(ticket, req.user, req.userRoles));
 });
 
 app.post('/api/tickets', authMiddleware, (req, res) => {
@@ -639,7 +1069,9 @@ app.post('/api/tickets', authMiddleware, (req, res) => {
   tickets.push(ticket);
   logStatusChange(ticket, null, openStatus.id, req.user.id, 'Ticket created');
   logActivity(req.user.id, 'TicketCreated', 'Ticket', ticket.id, ticket.referenceNumber);
-  res.status(201).location(`/api/tickets/${ticket.id}`).json(mapTicketDetail(ticket, req.userRoles));
+  notify(req.user.id, 'Ticket created', `Your ticket ${ticket.referenceNumber} was submitted.`, 'TicketCreated', ticket.id);
+  notifyStaffNewTicket(ticket, req.user.id);
+  res.status(201).location(`/api/tickets/${ticket.id}`).json(mapTicketDetail(ticket, req.user, req.userRoles));
 });
 
 app.put('/api/tickets/:id', authMiddleware, (req, res) => {
@@ -647,39 +1079,88 @@ app.put('/api/tickets/:id', authMiddleware, (req, res) => {
   const ticket = getTicketForUser(id, req.user);
   if (!ticket) return res.status(404).json({ message: 'Not found' });
 
+  const permissions = getTicketPermissions(ticket, req.user, req.userRoles);
   const { title, description, categoryId, priorityId, statusId } = req.body || {};
-  if (title != null) ticket.title = title;
-  if (description != null) ticket.description = description;
-  if (categoryId != null) ticket.categoryId = categoryId;
-  if (priorityId != null) ticket.priorityId = priorityId;
 
   if (statusId != null && statusId !== ticket.statusId) {
-    const fromId = ticket.statusId;
-    logStatusChange(ticket, fromId, statusId, req.user.id);
-    notify(
-      ticket.createdByUserId,
-      'Status updated',
-      `${ticket.referenceNumber} status changed.`,
-      'StatusChange',
-      ticket.id
-    );
+    if (!permissions.canChangeStatus) {
+      return res.status(400).json({ message: 'Status cannot be changed for this ticket.' });
+    }
+    logStatusChange(ticket, ticket.statusId, statusId, req.user.id);
+    notifyInvolved(ticket.id, 'Status updated', `${ticket.referenceNumber} is now ${getStatus(statusId)?.name}.`, 'StatusChange', req.user.id);
   } else {
+    if (!permissions.canEditDetails) {
+      return res.status(400).json({ message: 'Ticket details cannot be edited while in progress or closed.' });
+    }
+    if (title != null) ticket.title = title;
+    if (description != null) ticket.description = description;
+    if (categoryId != null) ticket.categoryId = categoryId;
+    if (priorityId != null) ticket.priorityId = priorityId;
     ticket.updatedAt = new Date().toISOString();
+    notifyInvolved(ticket.id, 'Ticket updated', `${ticket.referenceNumber} details were updated.`, 'TicketUpdated', req.user.id);
   }
 
-  res.json(mapTicketDetail(ticket, req.userRoles));
+  res.json(mapTicketDetail(ticket, req.user, req.userRoles));
 });
 
-app.delete('/api/tickets/:id', authMiddleware, requireRoles(ROLES.Admin, ROLES.Employee), (req, res) => {
+app.delete('/api/tickets/:id', authMiddleware, requireRoles(ROLES.Admin), (req, res) => {
   const id = Number(req.params.id);
   const ticket = getTicketForUser(id, req.user);
   if (!ticket) return res.status(404).json({ message: 'Not found' });
-  if (!hasRole(req.user, ROLES.Admin) && ticket.createdByUserId !== req.user.id) {
-    return res.status(403).json({ message: 'Forbidden' });
+
+  const permissions = getTicketPermissions(ticket, req.user, req.userRoles);
+  if (!permissions.canDelete) {
+    return res.status(400).json({ message: 'Only unassigned open tickets can be deleted.' });
   }
+
   ticket.isDeleted = true;
   ticket.updatedAt = new Date().toISOString();
   res.status(204).send();
+});
+
+app.post('/api/tickets/:id/reopen', authMiddleware, requireRoles(ROLES.Admin, ROLES.Agent), (req, res) => {
+  const id = Number(req.params.id);
+  const ticket = getTicketForUser(id, req.user);
+  if (!ticket) return res.status(404).json({ message: 'Not found' });
+
+  const permissions = getTicketPermissions(ticket, req.user, req.userRoles);
+  if (!permissions.canReopen) {
+    return res.status(400).json({ message: 'This ticket cannot be reopened.' });
+  }
+
+  const openStatus = getStatusByName('Open');
+  logStatusChange(ticket, ticket.statusId, openStatus.id, req.user.id, 'Ticket reopened');
+  ticket.resolvedAt = null;
+  ticket.closedAt = null;
+  res.json(mapTicketDetail(ticket, req.user, req.userRoles));
+});
+
+app.post('/api/tickets/:id/duplicate', authMiddleware, (req, res) => {
+  const id = Number(req.params.id);
+  const source = getTicketForUser(id, req.user);
+  if (!source) return res.status(404).json({ message: 'Not found' });
+
+  const openStatus = getStatusByName('Open');
+  const now = new Date().toISOString();
+  const ticket = {
+    id: nextTicketId++,
+    referenceNumber: generateReference(),
+    title: `Copy: ${source.title}`,
+    description: source.description,
+    categoryId: source.categoryId,
+    priorityId: source.priorityId,
+    statusId: openStatus.id,
+    createdByUserId: req.user.id,
+    assignedToUserId: null,
+    createdAt: now,
+    updatedAt: now,
+    resolvedAt: null,
+    closedAt: null,
+    isDeleted: false,
+  };
+  tickets.push(ticket);
+  logStatusChange(ticket, null, openStatus.id, req.user.id, `Duplicated from ${source.referenceNumber}`);
+  res.status(201).json(mapTicketDetail(ticket, req.user, req.userRoles));
 });
 
 app.post('/api/tickets/:id/assign', authMiddleware, requireRoles(ROLES.Admin, ROLES.Agent), (req, res) => {
@@ -687,9 +1168,23 @@ app.post('/api/tickets/:id/assign', authMiddleware, requireRoles(ROLES.Admin, RO
   const ticket = getTicketForUser(id, req.user);
   if (!ticket) return res.status(404).json({ message: 'Not found' });
 
+  const permissions = getTicketPermissions(ticket, req.user, req.userRoles);
+  if (!permissions.canAssign) {
+    return res.status(400).json({ message: 'Assignment is not allowed for this ticket.' });
+  }
+
   const { assignedToUserId, notes, isEscalation = false } = req.body || {};
+  if (isEscalation && !permissions.canEscalate) {
+    return res.status(400).json({ message: 'Only admins can escalate tickets.' });
+  }
+
   ticket.assignedToUserId = assignedToUserId;
   ticket.updatedAt = new Date().toISOString();
+
+  if (getStatus(ticket.statusId)?.name === 'Open') {
+    const inProgress = getStatusByName('In Progress');
+    logStatusChange(ticket, ticket.statusId, inProgress.id, req.user.id, 'Assigned to agent');
+  }
 
   assignments.push({
     id: nextAssignmentId++,
@@ -701,14 +1196,20 @@ app.post('/api/tickets/:id/assign', authMiddleware, requireRoles(ROLES.Admin, RO
     isEscalation,
   });
 
-  notify(assignedToUserId, 'Ticket assigned', `You were assigned ${ticket.referenceNumber}.`, 'Assignment', id);
-  res.json({ message: 'Ticket assigned.' });
+  const title = isEscalation ? 'Ticket escalated' : 'Ticket assigned';
+  notifyInvolved(id, title, `${ticket.referenceNumber} assigned to ${fullName(findUser(assignedToUserId))}.`, 'Assignment', req.user.id);
+  res.json({ message: isEscalation ? 'Ticket escalated.' : 'Ticket assigned.' });
 });
 
 app.post('/api/tickets/:id/comments', authMiddleware, (req, res) => {
   const id = Number(req.params.id);
   const ticket = getTicketForUser(id, req.user);
   if (!ticket) return res.status(404).json({ message: 'Not found' });
+
+  const permissions = getTicketPermissions(ticket, req.user, req.userRoles);
+  if (!permissions.canComment) {
+    return res.status(400).json({ message: 'Comments are not allowed on closed tickets.' });
+  }
 
   const { body, isInternal } = req.body || {};
   if (isInternal && !hasRole(req.user, ROLES.Admin, ROLES.Agent)) {
@@ -723,10 +1224,9 @@ app.post('/api/tickets/:id/comments', authMiddleware, (req, res) => {
     isInternal: !!isInternal,
     createdAt: new Date().toISOString(),
   });
+  ticket.updatedAt = new Date().toISOString();
 
-  if (ticket.createdByUserId !== req.user.id) {
-    notify(ticket.createdByUserId, 'New comment', `New comment on ${ticket.referenceNumber}.`, 'Comment', id);
-  }
+  notifyInvolved(id, 'New comment', `New comment on ${ticket.referenceNumber}.`, 'Comment', req.user.id);
   res.json({ message: 'Comment added.' });
 });
 
@@ -735,14 +1235,29 @@ app.post('/api/tickets/:id/attachments', authMiddleware, upload.single('file'), 
   const ticket = getTicketForUser(id, req.user);
   if (!ticket) return res.status(404).json({ message: 'Not found' });
 
+  const permissions = getTicketPermissions(ticket, req.user, req.userRoles);
+  if (!permissions.canUpload) {
+    return res.status(400).json({ message: 'Attachments are not allowed on closed tickets.' });
+  }
+
   const file = req.file;
   if (!file || file.size === 0) return res.status(400).json({ message: 'Empty file.' });
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    fs.unlinkSync(file.path);
+    return res.status(400).json({ message: 'File exceeds 5 MB limit.' });
+  }
 
-  const allowed = ['.png', '.jpg', '.jpeg', '.pdf', '.txt', '.log'];
+  const count = attachments.filter((a) => a.ticketId === id).length;
+  if (count >= MAX_ATTACHMENTS) {
+    fs.unlinkSync(file.path);
+    return res.status(400).json({ message: `Maximum ${MAX_ATTACHMENTS} attachments per ticket.` });
+  }
+
+  const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.pdf', '.txt', '.log'];
   const ext = path.extname(file.originalname).toLowerCase();
   if (!allowed.includes(ext)) {
     fs.unlinkSync(file.path);
-    return res.status(400).json({ message: 'File type not allowed.' });
+    return res.status(400).json({ message: 'Allowed: PNG, JPG, WEBP, PDF, TXT, LOG (max 5 MB).' });
   }
 
   attachments.push({
@@ -755,7 +1270,9 @@ app.post('/api/tickets/:id/attachments', authMiddleware, upload.single('file'), 
     fileSizeBytes: file.size,
     uploadedAt: new Date().toISOString(),
   });
+  ticket.updatedAt = new Date().toISOString();
 
+  notifyInvolved(id, 'Attachment added', `File uploaded on ${ticket.referenceNumber}: ${file.originalname}`, 'Attachment', req.user.id);
   res.json({ message: 'File uploaded.', fileName: file.originalname });
 });
 
@@ -829,6 +1346,31 @@ app.get('/api/notifications/unread-count', authMiddleware, (req, res) => {
   res.json({ count });
 });
 
+app.get('/api/notifications/poll', authMiddleware, (req, res) => {
+  const since = req.query.since;
+  const mine = notifications.filter((n) => n.userId === req.user.id);
+  const unread = mine.filter((n) => !n.isRead);
+  let items = mine;
+  if (since) {
+    const t = new Date(since).getTime();
+    items = mine.filter((n) => new Date(n.createdAt).getTime() > t);
+  } else {
+    items = unread;
+  }
+  res.json({
+    count: unread.length,
+    items: items.slice(0, 10).map((n) => ({
+      id: n.id,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      ticketId: n.ticketId,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+    })),
+  });
+});
+
 // ── Reports ───────────────────────────────────────────────────────────────────
 app.get('/api/reports', authMiddleware, requireRoles(ROLES.Admin, ROLES.Manager), (req, res) => {
   const q = queryTicketsForUser(req.user);
@@ -867,7 +1409,63 @@ app.get('/api/reports', authMiddleware, requireRoles(ROLES.Admin, ROLES.Manager)
     return { agentName: fullName(agent), resolved, open: openCount, avgDays };
   });
 
-  res.json({ totalTickets, resolvedTickets, avgResolutionDays, agentPerformance });
+  const catMap = {};
+  for (const t of q) {
+    const name = getCategory(t.categoryId)?.name ?? 'Unknown';
+    catMap[name] = (catMap[name] || 0) + 1;
+  }
+  const byCategory = Object.entries(catMap)
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const priMap = {};
+  for (const t of q) {
+    const name = getPriority(t.priorityId)?.name ?? 'Unknown';
+    priMap[name] = (priMap[name] || 0) + 1;
+  }
+  const byPriority = Object.entries(priMap)
+    .map(([priority, count]) => ({ priority, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const stMap = {};
+  for (const t of q) {
+    const name = getStatus(t.statusId)?.name ?? 'Unknown';
+    stMap[name] = (stMap[name] || 0) + 1;
+  }
+  const byStatus = Object.entries(stMap)
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const monthlyTrend = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() - i);
+    const monthStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+    const label = monthStart.toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+    const created = q.filter((t) => {
+      const c = new Date(t.createdAt);
+      return c >= monthStart && c < monthEnd;
+    }).length;
+    const resolvedInMonth = q.filter((t) => {
+      if (!t.resolvedAt) return false;
+      const r = new Date(t.resolvedAt);
+      return r >= monthStart && r < monthEnd;
+    }).length;
+    monthlyTrend.push({ month: label, created, resolved: resolvedInMonth });
+  }
+
+  res.json({
+    totalTickets,
+    resolvedTickets,
+    avgResolutionDays,
+    agentPerformance,
+    byCategory,
+    byPriority,
+    byStatus,
+    monthlyTrend,
+  });
 });
 
 app.get('/api/reports/export/csv', authMiddleware, requireRoles(ROLES.Admin, ROLES.Manager), (req, res) => {
@@ -904,6 +1502,62 @@ app.post('/api/ai/suggest', authMiddleware, (req, res) => {
 app.post('/api/ai/chat', authMiddleware, (req, res) => {
   const { question } = req.body || {};
   res.json({ answer: aiChatAnswer(question ?? '') });
+});
+
+app.post('/api/ai/help-chat', authMiddleware, (req, res) => {
+  const { question } = req.body || {};
+  res.json(aiHelpChat(question ?? ''));
+});
+
+app.post('/api/ai/parse-ticket', authMiddleware, (req, res) => {
+  const { shortcut } = req.body || {};
+  const parsed = aiParseTicketShortcut(shortcut);
+  if (!parsed) return res.status(400).json({ message: 'Describe your issue in the shortcut field.' });
+  const cat = categories.find((c) => c.name === parsed.category);
+  const pri = priorities.find((p) => p.name === parsed.priority);
+  res.json({
+    ...parsed,
+    categoryId: cat?.id ?? categories[0]?.id,
+    priorityId: pri?.id ?? priorities[1]?.id,
+  });
+});
+
+app.post('/api/ai/create-ticket', authMiddleware, async (req, res) => {
+  const { shortcut } = req.body || {};
+  const parsed = aiParseTicketShortcut(shortcut);
+  if (!parsed) return res.status(400).json({ message: 'Describe your issue in the shortcut field.' });
+
+  const cat = categories.find((c) => c.name === parsed.category) ?? categories[0];
+  const pri = priorities.find((p) => p.name === parsed.priority) ?? priorities[1];
+  const openStatus = getStatusByName('Open');
+  const now = new Date().toISOString();
+
+  const ticket = {
+    id: nextTicketId++,
+    referenceNumber: generateReference(),
+    title: parsed.title,
+    description: parsed.description,
+    categoryId: cat.id,
+    priorityId: pri.id,
+    statusId: openStatus.id,
+    createdByUserId: req.user.id,
+    assignedToUserId: null,
+    createdAt: now,
+    updatedAt: now,
+    resolvedAt: null,
+    closedAt: null,
+    isDeleted: false,
+  };
+  tickets.push(ticket);
+  logStatusChange(ticket, null, openStatus.id, req.user.id, 'Ticket created via AI');
+  logActivity(req.user.id, 'TicketCreated', 'Ticket', ticket.id, ticket.referenceNumber);
+  notify(req.user.id, 'Ticket created', `AI created ${ticket.referenceNumber} for you.`, 'TicketCreated', ticket.id);
+  notifyStaffNewTicket(ticket, req.user.id);
+
+  res.status(201).json({
+    ticket: mapTicketDetail(ticket, req.user, req.userRoles),
+    parsed: { ...parsed, categoryId: cat.id, priorityId: pri.id },
+  });
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

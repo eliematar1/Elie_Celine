@@ -6,6 +6,8 @@ export const ticketsApi = {
   create: (data) => api.post('/api/tickets', data),
   update: (id, data) => api.put(`/api/tickets/${id}`, data),
   remove: (id) => api.delete(`/api/tickets/${id}`),
+  reopen: (id) => api.post(`/api/tickets/${id}/reopen`),
+  duplicate: (id) => api.post(`/api/tickets/${id}/duplicate`),
   assign: (id, data) => api.post(`/api/tickets/${id}/assign`, data),
   addComment: (id, data) => api.post(`/api/tickets/${id}/comments`, data),
   upload: (id, file) => {
@@ -26,6 +28,7 @@ export const notificationsApi = {
   list: () => api.get('/api/notifications'),
   markAllRead: () => api.post('/api/notifications/mark-all-read'),
   unreadCount: () => api.get('/api/notifications/unread-count'),
+  poll: (since) => api.get('/api/notifications/poll', { params: since ? { since } : {} }),
 };
 
 export const reportsApi = {
@@ -36,4 +39,7 @@ export const reportsApi = {
 export const aiApi = {
   suggest: (title, description) => api.post('/api/ai/suggest', { title, description }),
   chat: (question) => api.post('/api/ai/chat', { question }),
+  helpChat: (question) => api.post('/api/ai/help-chat', { question }),
+  parseTicket: (shortcut) => api.post('/api/ai/parse-ticket', { shortcut }),
+  createTicket: (shortcut) => api.post('/api/ai/create-ticket', { shortcut }),
 };

@@ -42,3 +42,14 @@ public record ChangePasswordRequest(
     [Required] string CurrentPassword,
     [Required][MinLength(6)] string NewPassword
 );
+
+public record AdminCreateUserRequest(
+    [Required][EmailAddress] string Email,
+    [Required][MinLength(6)] string Password,
+    [Required] string FirstName,
+    [Required] string LastName,
+    string? Department,
+    [Required] string Role
+);
+
+public record UpdateUserStatusRequest([Required] bool IsActive);

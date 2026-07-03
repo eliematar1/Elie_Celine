@@ -3,14 +3,19 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AppRoles } from '../constants/roles';
 import { notificationsApi } from '../services/ticketsApi';
+import NotificationToast from './NotificationToast';
+import HelpChatWidget from './HelpChatWidget';
 
 const nav = [
   { to: '/dashboard', label: 'Dashboard', icon: '▣' },
   { to: '/tickets', label: 'Tickets', icon: '☰' },
   { to: '/tickets/new', label: 'Create Ticket', icon: '＋' },
   { to: '/notifications', label: 'Notifications', icon: '🔔', badge: true },
-  { to: '/reports', label: 'Reports', icon: '◫' },
   { to: '/profile', label: 'Profile', icon: '👤' },
+];
+
+const managerNav = [
+  { to: '/reports', label: 'Reports', icon: '◫' },
 ];
 
 export default function AppLayout() {
@@ -42,6 +47,13 @@ export default function AppLayout() {
               {item.badge && unread > 0 ? <span className="nav-badge">{unread}</span> : null}
             </NavLink>
           ))}
+          {(hasRole(AppRoles.Admin) || hasRole(AppRoles.Manager)) &&
+            managerNav.map((item) => (
+              <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+                <span className="nav-icon">{item.icon}</span>
+                {item.label}
+              </NavLink>
+            ))}
           {(hasRole(AppRoles.Admin) || hasRole(AppRoles.Manager)) && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
               <span className="nav-icon">⚙</span>
@@ -81,6 +93,8 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </div>
+      <NotificationToast onCountChange={setUnread} />
+      <HelpChatWidget />
     </div>
   );
 }

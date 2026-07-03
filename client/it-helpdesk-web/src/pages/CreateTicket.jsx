@@ -6,10 +6,11 @@ export default function CreateTicket() {
   const navigate = useNavigate();
   const [lookups, setLookups] = useState({ categories: [], priorities: [] });
   const [form, setForm] = useState({ title: '', description: '', categoryId: '', priorityId: '' });
-  const [aiQuestion, setAiQuestion] = useState('');
-  const [aiAnswer, setAiAnswer] = useState('');
+  const [shortcut, setShortcut] = useState('');
+  const [aiPreview, setAiPreview] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
     ticketsApi.lookups().then((res) => {
@@ -26,9 +27,39 @@ export default function CreateTicket() {
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
-  const askAi = async () => {
-    const { data } = await aiApi.chat(aiQuestion);
-    setAiAnswer(data.answer);
+  const previewAi = async () => {
+    if (!shortcut.trim()) return;
+    setAiBusy(true);
+    setError('');
+    try {
+      const { data } = await aiApi.parseTicket(shortcut);
+      setAiPreview(data);
+      setForm({
+        title: data.title,
+        description: data.description,
+        categoryId: data.categoryId,
+        priorityId: data.priorityId,
+      });
+    } catch (err) {
+      setError(err.response?.data?.message || 'AI could not parse your request.');
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const createWithAi = async () => {
+    if (!shortcut.trim()) return;
+    setAiBusy(true);
+    setError('');
+    try {
+      const { data } = await aiApi.createTicket(shortcut);
+      const ticketId = data.ticket?.id;
+      navigate(`/tickets/${ticketId}`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'AI ticket creation failed.');
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const suggest = async () => {
@@ -63,21 +94,43 @@ export default function CreateTicket() {
     <>
       <div className="page-header">
         <h1 className="page-title">Create support ticket</h1>
-        <p className="page-sub">Describe your issue and we will assign an agent</p>
+        <p className="page-sub">Use AI Quick Ticket or fill the form manually</p>
       </div>
 
-      <div className="card ai-hint">
-        <strong>💬 AI assistant</strong> — Ask before opening a ticket
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <input type="text" className="filter-input" style={{ flex: 1 }} placeholder="How do I connect to VPN?" value={aiQuestion} onChange={(e) => setAiQuestion(e.target.value)} />
-          <button type="button" className="btn btn-secondary" onClick={askAi}>Ask</button>
+      <div className="card ai-ticket-card">
+        <h3 className="card-title">⚡ AI Quick Ticket</h3>
+        <p className="text-muted">Describe your issue in one line — AI sets category, priority, and deadline if mentioned.</p>
+        <p className="text-muted" style={{ fontSize: '.8rem' }}>
+          Example: <em>Software High tomorrow laptop won&apos;t boot after Windows update</em>
+        </p>
+        <textarea
+          className="comment-input"
+          rows={3}
+          placeholder="Describe your issue…"
+          value={shortcut}
+          onChange={(e) => setShortcut(e.target.value)}
+        />
+        <div className="btn-group" style={{ marginTop: 12 }}>
+          <button type="button" className="btn btn-secondary" onClick={previewAi} disabled={aiBusy || !shortcut.trim()}>
+            Preview
+          </button>
+          <button type="button" className="btn btn-primary" onClick={createWithAi} disabled={aiBusy || !shortcut.trim()}>
+            {aiBusy ? 'Creating…' : 'Create ticket with AI'}
+          </button>
         </div>
-        {aiAnswer && <p style={{ marginTop: 10, fontSize: '.9rem' }}>{aiAnswer}</p>}
+        {aiPreview && (
+          <div className="ai-preview" style={{ marginTop: 16 }}>
+            <strong>AI analysis</strong>
+            <p>Category: {aiPreview.category} · Priority: {aiPreview.priority}</p>
+            <p><strong>{aiPreview.title}</strong></p>
+          </div>
+        )}
       </div>
 
       {error && <div className="error">{error}</div>}
 
       <form className="card form-card" onSubmit={handleSubmit}>
+        <h3 className="card-title">Manual ticket form</h3>
         <div className="form-group">
           <label>Title *</label>
           <input value={form.title} onChange={set('title')} required onBlur={suggest} />

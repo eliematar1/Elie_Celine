@@ -32,7 +32,11 @@ export default function App() {
         <Route path="/tickets/new" element={<CreateTicket />} />
         <Route path="/tickets/:id" element={<TicketDetail />} />
         <Route path="/notifications" element={<Notifications />} />
-        <Route path="/reports" element={<Reports />} />
+        <Route path="/reports" element={
+          <ProtectedRoute roles={[AppRoles.Admin, AppRoles.Manager]}>
+            <Reports />
+          </ProtectedRoute>
+        } />
         <Route path="/profile" element={<Profile />} />
         <Route path="/admin" element={<Admin />} />
       </Route>

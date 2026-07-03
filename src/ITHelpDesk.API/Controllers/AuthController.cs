@@ -63,8 +63,11 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
     {
         var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user == null || !user.IsActive)
+        if (user == null)
             return Unauthorized(new { message = "Invalid email or password." });
+
+        if (!user.IsActive)
+            return StatusCode(403, new { message = "This account has been deactivated. Contact your administrator." });
 
         var check = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
         if (!check.Succeeded)
