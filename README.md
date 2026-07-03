@@ -34,10 +34,10 @@ A modern web-based IT Help Desk system for employees to submit support requests 
 
 | Role | Permissions |
 |------|-------------|
-| Admin | Full system access |
-| IT Support Agent | Manage and resolve tickets |
-| Employee | Create and track tickets |
-| Manager | Monitor team tickets and reports |
+| Admin | Full system access (includes creating tickets) |
+| IT Support Agent | Manage and resolve tickets (no ticket creation) |
+| Employee | Create, edit, and track own tickets |
+| Manager | Monitor team tickets, assign agents, and view reports |
 
 ---
 

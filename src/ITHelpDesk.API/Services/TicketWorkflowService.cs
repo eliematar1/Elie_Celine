@@ -28,12 +28,28 @@ public class TicketWorkflowService
 
         if (isManager && !isAdmin)
         {
+            if (state.IsClosed)
+            {
+                return new TicketPermissionsDto(
+                    IsReadOnly: true,
+                    CanEditDetails: false,
+                    CanDelete: false,
+                    CanAssign: false,
+                    CanComment: false,
+                    CanUpload: false,
+                    CanChangeStatus: false,
+                    CanReopen: false,
+                    CanDuplicate: false,
+                    CanEscalate: false
+                );
+            }
+
             return new TicketPermissionsDto(
-                IsReadOnly: true,
+                IsReadOnly: false,
                 CanEditDetails: false,
                 CanDelete: false,
-                CanAssign: false,
-                CanComment: false,
+                CanAssign: true,
+                CanComment: true,
                 CanUpload: false,
                 CanChangeStatus: false,
                 CanReopen: false,
@@ -60,11 +76,12 @@ public class TicketWorkflowService
 
         if (state.IsWorking)
         {
+            var canEditAsOwner = isOwner && state.StatusName.Equals("Pending", StringComparison.OrdinalIgnoreCase);
             return new TicketPermissionsDto(
                 IsReadOnly: false,
-                CanEditDetails: false,
+                CanEditDetails: canEditAsOwner,
                 CanDelete: false,
-                CanAssign: isStaff,
+                CanAssign: isStaff || (isManager && !isAdmin),
                 CanComment: true,
                 CanUpload: true,
                 CanChangeStatus: isStaff,
@@ -78,7 +95,7 @@ public class TicketWorkflowService
             IsReadOnly: false,
             CanEditDetails: isAdmin || isOwner,
             CanDelete: isAdmin && isUnassigned && state.IsOpen,
-            CanAssign: isStaff,
+            CanAssign: isStaff || (isManager && !isAdmin),
             CanComment: true,
             CanUpload: true,
             CanChangeStatus: isStaff,

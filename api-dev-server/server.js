@@ -310,6 +310,10 @@ function getTicketState(ticket) {
   };
 }
 
+function canCreateTickets(user) {
+  return hasRole(user, ROLES.Admin) || hasRole(user, ROLES.Employee);
+}
+
 function getTicketPermissions(ticket, user, roles) {
   const state = getTicketState(ticket);
   const isAdmin = hasRole(user, ROLES.Admin);
@@ -317,14 +321,29 @@ function getTicketPermissions(ticket, user, roles) {
   const isManager = hasRole(user, ROLES.Manager);
   const isStaff = isAdmin || isAgent;
   const isOwner = ticket.createdByUserId === user.id;
+  const canAssignRole = isStaff || (isManager && !isAdmin);
 
   if (isManager && !isAdmin) {
+    if (state.isClosed) {
+      return {
+        isReadOnly: true,
+        canEditDetails: false,
+        canDelete: false,
+        canAssign: false,
+        canComment: false,
+        canUpload: false,
+        canChangeStatus: false,
+        canReopen: false,
+        canDuplicate: false,
+        canEscalate: false,
+      };
+    }
     return {
-      isReadOnly: true,
+      isReadOnly: false,
       canEditDetails: false,
       canDelete: false,
-      canAssign: false,
-      canComment: false,
+      canAssign: true,
+      canComment: true,
       canUpload: false,
       canChangeStatus: false,
       canReopen: false,
@@ -348,11 +367,12 @@ function getTicketPermissions(ticket, user, roles) {
     };
   }
   if (state.isWorking) {
+    const canEditAsOwner = isOwner && state.statusName === 'Pending';
     return {
       isReadOnly: false,
-      canEditDetails: false,
+      canEditDetails: canEditAsOwner,
       canDelete: false,
-      canAssign: isStaff,
+      canAssign: canAssignRole,
       canComment: true,
       canUpload: true,
       canChangeStatus: isStaff,
@@ -365,7 +385,7 @@ function getTicketPermissions(ticket, user, roles) {
     isReadOnly: false,
     canEditDetails: isAdmin || isOwner,
     canDelete: isAdmin && state.isUnassigned && state.isOpen,
-    canAssign: isStaff,
+    canAssign: canAssignRole,
     canComment: true,
     canUpload: true,
     canChangeStatus: isStaff,
@@ -1009,7 +1029,7 @@ app.get('/api/users/roles', authMiddleware, requireRoles(ROLES.Admin), (_req, re
   res.json(ALL_ROLES);
 });
 
-app.get('/api/users/agents', authMiddleware, requireRoles(ROLES.Admin, ROLES.Agent), (_req, res) => {
+app.get('/api/users/agents', authMiddleware, requireRoles(ROLES.Admin, ROLES.Agent, ROLES.Manager), (_req, res) => {
   const result = users
     .filter((u) => u.isActive && hasRole(u, ROLES.Agent))
     .map((u) => ({
@@ -1171,6 +1191,9 @@ app.get('/api/tickets/:id', authMiddleware, (req, res) => {
 });
 
 app.post('/api/tickets', authMiddleware, (req, res) => {
+  if (!canCreateTickets(req.user)) {
+    return res.status(403).json({ message: 'Only employees and administrators can create tickets.' });
+  }
   const { title, description, categoryId, priorityId } = req.body || {};
   const openStatus = getStatusByName('Open');
   const now = new Date().toISOString();
@@ -1258,6 +1281,9 @@ app.post('/api/tickets/:id/reopen', authMiddleware, requireRoles(ROLES.Admin, RO
 });
 
 app.post('/api/tickets/:id/duplicate', authMiddleware, (req, res) => {
+  if (!canCreateTickets(req.user)) {
+    return res.status(403).json({ message: 'Only employees and administrators can create tickets.' });
+  }
   const id = Number(req.params.id);
   const source = getTicketForUser(id, req.user);
   if (!source) return res.status(404).json({ message: 'Not found' });
@@ -1285,7 +1311,7 @@ app.post('/api/tickets/:id/duplicate', authMiddleware, (req, res) => {
   res.status(201).json(mapTicketDetail(ticket, req.user, req.userRoles));
 });
 
-app.post('/api/tickets/:id/assign', authMiddleware, requireRoles(ROLES.Admin, ROLES.Agent), (req, res) => {
+app.post('/api/tickets/:id/assign', authMiddleware, requireRoles(ROLES.Admin, ROLES.Agent, ROLES.Manager), (req, res) => {
   const id = Number(req.params.id);
   const ticket = getTicketForUser(id, req.user);
   if (!ticket) return res.status(404).json({ message: 'Not found' });
@@ -1647,6 +1673,9 @@ app.post('/api/ai/parse-ticket', authMiddleware, (req, res) => {
 });
 
 app.post('/api/ai/create-ticket', authMiddleware, async (req, res) => {
+  if (!canCreateTickets(req.user)) {
+    return res.status(403).json({ message: 'Only employees and administrators can create tickets.' });
+  }
   const { shortcut } = req.body || {};
   const parsed = aiParseTicketShortcut(shortcut);
   if (!parsed) return res.status(400).json({ message: 'Describe your issue in the shortcut field.' });

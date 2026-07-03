@@ -13,9 +13,9 @@ Use this document when submitting to your instructor.
 | Email | Password | Role | What to demo |
 |-------|----------|------|----------------|
 | admin@ithelpdesk.local | Admin@123 | **Admin** | Full access, user management, system settings |
-| manager@ithelpdesk.local | Manager@123 | **Manager** | All tickets (read-only), reports, team user list |
-| agent@ithelpdesk.local | Agent@123 | **IT Support Agent** | Assign, resolve, comments, internal notes |
-| employee@ithelpdesk.local | Employee@123 | **Employee** | Create tickets, track own tickets, AI help |
+| manager@ithelpdesk.local | Manager@123 | **Manager** | All tickets, assign agents, reports, team list |
+| agent@ithelpdesk.local | Agent@123 | **IT Support Agent** | Assign, resolve, comments — cannot create tickets |
+| employee@ithelpdesk.local | Employee@123 | **Employee** | Create & edit own tickets, AI help |
 
 **Run locally:**
 ```powershell
@@ -31,10 +31,10 @@ cd client\it-helpdesk-web && npm run dev  # port 5173
 
 | Role | Required | Status | Where |
 |------|----------|--------|-------|
-| Admin | Full system access | ✅ | Admin panel, settings, users, all tickets |
-| IT Support Agent | Manage & resolve tickets | ✅ | Assign, status, comments, attachments |
-| Employee | Create & track tickets | ✅ | Create ticket, own tickets, notifications |
-| **Manager** | Monitor team tickets & reports | ✅ | All tickets read-only, Reports, Team overview |
+| Admin | Full system access | ✅ | All features including create tickets |
+| IT Support Agent | Manage & resolve tickets | ✅ | Assign, status, comments — **no create** |
+| Employee | Create & track tickets | ✅ | Create & edit own open/pending tickets |
+| Manager | Monitor team tickets & reports | ✅ | View all tickets, **assign agents**, reports |
 
 ### Authentication (PDF §3a)
 

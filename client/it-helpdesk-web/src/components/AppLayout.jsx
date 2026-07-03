@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { AppRoles } from '../constants/roles';
+import { AppRoles, canCreateTickets } from '../constants/roles';
 import { notificationsApi } from '../services/ticketsApi';
 import NotificationToast from './NotificationToast';
 import HelpChatWidget from './HelpChatWidget';
@@ -9,7 +9,7 @@ import HelpChatWidget from './HelpChatWidget';
 const baseNav = [
   { to: '/dashboard', label: 'Dashboard', icon: '▣' },
   { to: '/tickets', label: 'Tickets', icon: '☰' },
-  { to: '/tickets/new', label: 'Create Ticket', icon: '＋', hideForManager: true },
+  { to: '/tickets/new', label: 'Create Ticket', icon: '＋', createOnly: true },
   { to: '/notifications', label: 'Notifications', icon: '🔔', badge: true },
   { to: '/profile', label: 'Profile', icon: '👤' },
 ];
@@ -26,7 +26,7 @@ export default function AppLayout() {
   const isManager = hasRole(AppRoles.Manager);
 
   const nav = baseNav.filter((item) => {
-    if (item.hideForManager && isManager && !isAdmin) return false;
+    if (item.createOnly && !canCreateTickets(hasRole)) return false;
     return true;
   });
 

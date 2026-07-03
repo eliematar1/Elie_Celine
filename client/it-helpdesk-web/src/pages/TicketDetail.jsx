@@ -53,7 +53,7 @@ export default function TicketDetail() {
     load();
     ticketsApi.lookups().then((r) => setLookups(r.data));
     settingsApi.get().then((r) => setMaxAttachmentMb(r.data.maxAttachmentSizeMb)).catch(() => {});
-    if (hasRole(AppRoles.Admin) || hasRole(AppRoles.Agent)) {
+    if (hasRole(AppRoles.Admin) || hasRole(AppRoles.Agent) || hasRole(AppRoles.Manager)) {
       usersApi.agents().then((r) => setAgents(r.data)).catch(() => {});
     }
   }, [id]);
@@ -189,7 +189,8 @@ export default function TicketDetail() {
 
       {isManagerView && (
         <div className="card card-alert" style={{ marginBottom: 16 }}>
-          <strong>Manager view</strong> — Read-only monitoring. Use <Link to="/reports">Reports</Link> for team analytics.
+          <strong>Manager view</strong> — Monitor tickets and assign IT agents. Use{' '}
+          <Link to="/reports">Reports</Link> for team analytics.
         </div>
       )}
 

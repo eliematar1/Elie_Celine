@@ -68,6 +68,9 @@ public class TicketsController : ControllerBase
     public async Task<ActionResult<TicketDetailDto>> Create([FromBody] CreateTicketRequest request)
     {
         var (user, roles) = await GetUserAsync();
+        if (!roles.Any(r => r is AppRoles.Admin or AppRoles.Employee))
+            return StatusCode(403, new { message = "Only employees and administrators can create tickets." });
+
         var openStatus = await _db.TicketStatuses.FirstAsync(s => s.Name == "Open");
 
         var ticket = new Ticket
@@ -180,6 +183,9 @@ public class TicketsController : ControllerBase
     public async Task<ActionResult<TicketDetailDto>> Duplicate(int id)
     {
         var (user, roles) = await GetUserAsync();
+        if (!roles.Any(r => r is AppRoles.Admin or AppRoles.Employee))
+            return StatusCode(403, new { message = "Only employees and administrators can create tickets." });
+
         var source = await LoadTicketDetail(id, user, roles);
         if (source == null) return NotFound();
 
@@ -204,7 +210,7 @@ public class TicketsController : ControllerBase
     }
 
     [HttpPost("{id:int}/assign")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent},{AppRoles.Manager}")]
     public async Task<IActionResult> Assign(int id, [FromBody] AssignTicketRequest request)
     {
         var (user, roles) = await GetUserAsync();

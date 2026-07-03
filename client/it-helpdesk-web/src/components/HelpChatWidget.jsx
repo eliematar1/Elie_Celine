@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { aiApi } from '../services/ticketsApi';
+import { useAuth } from '../context/AuthContext';
+import { canCreateTickets } from '../constants/roles';
 
 export default function HelpChatWidget() {
+  const { hasRole } = useAuth();
+  const showCreateLink = canCreateTickets(hasRole);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([
@@ -24,9 +28,11 @@ export default function HelpChatWidget() {
       const steps = data.nextSteps?.length
         ? `\n\nNext steps:\n${data.nextSteps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
         : '';
-      const suggest = data.suggestCreateTicket
+      const suggest = data.suggestCreateTicket && showCreateLink
         ? '\n\nIf this does not help, open Create Ticket or use AI Quick Ticket.'
-        : '';
+        : data.suggestCreateTicket
+          ? '\n\nIf this does not help, contact your IT help desk to open a ticket.'
+          : '';
       setMessages((m) => [...m, { role: 'bot', text: data.answer + steps + suggest, suggestTicket: data.suggestCreateTicket }]);
     } catch {
       setMessages((m) => [...m, { role: 'bot', text: 'Sorry, I could not respond. Please try again.' }]);
@@ -48,7 +54,7 @@ export default function HelpChatWidget() {
             {messages.map((m, i) => (
               <div key={i} className={`help-chat-msg ${m.role}`}>
                 <p>{m.text}</p>
-                {m.suggestTicket && (
+                {m.suggestTicket && showCreateLink && (
                   <Link to="/tickets/new" className="link-sm" onClick={() => setOpen(false)}>Create a ticket →</Link>
                 )}
               </div>

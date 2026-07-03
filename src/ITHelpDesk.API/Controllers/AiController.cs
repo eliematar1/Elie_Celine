@@ -72,6 +72,10 @@ public class AiController : ControllerBase
     public async Task<IActionResult> CreateTicketFromAi([FromBody] ShortcutRequest request)
     {
         var user = await _userManager.GetUserAsync(User);
+        var roles = await _userManager.GetRolesAsync(user!);
+        if (!roles.Any(r => r is AppRoles.Admin or AppRoles.Employee))
+            return StatusCode(403, new { message = "Only employees and administrators can create tickets." });
+
         var parsed = _ai.ParseTicketShortcut(request.Shortcut);
         if (parsed == null) return BadRequest(new { message = "Describe your issue in the shortcut field." });
 

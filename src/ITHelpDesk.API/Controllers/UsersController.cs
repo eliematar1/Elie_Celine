@@ -174,7 +174,7 @@ public class UsersController : ControllerBase
     public IActionResult Roles() => Ok(AppRoles.All);
 
     [HttpGet("agents")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent},{AppRoles.Manager}")]
     public async Task<IActionResult> Agents()
     {
         var agents = await _userManager.GetUsersInRoleAsync(AppRoles.Agent);

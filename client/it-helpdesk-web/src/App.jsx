@@ -13,7 +13,7 @@ import Reports from './pages/Reports';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import ForgotPassword from './pages/ForgotPassword';
-import { AppRoles } from './constants/roles';
+import { AppRoles, canCreateTickets } from './constants/roles';
 
 export default function App() {
   return (
@@ -32,7 +32,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/tickets" element={<TicketList />} />
         <Route path="/tickets/new" element={
-          <ProtectedRoute roles={[AppRoles.Admin, AppRoles.Agent, AppRoles.Employee]}>
+          <ProtectedRoute roles={[AppRoles.Admin, AppRoles.Employee]}>
             <CreateTicket />
           </ProtectedRoute>
         } />

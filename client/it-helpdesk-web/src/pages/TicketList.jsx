@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { ticketsApi } from '../services/ticketsApi';
+import { useAuth } from '../context/AuthContext';
+import { canCreateTickets } from '../constants/roles';
 
 export default function TicketList() {
+  const { hasRole } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [lookups, setLookups] = useState({ statuses: [], categories: [] });
   const [search, setSearch] = useState('');
@@ -35,7 +38,9 @@ export default function TicketList() {
           <h1 className="page-title">Tickets</h1>
           <p className="page-sub">Manage and track support requests</p>
         </div>
-        <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
+        {canCreateTickets(hasRole) && (
+          <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
+        )}
       </div>
 
       <div className="card filters-card">
