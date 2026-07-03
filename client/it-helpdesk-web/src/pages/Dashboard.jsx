@@ -22,7 +22,10 @@ export default function Dashboard() {
   if (!data) return <p className="text-muted">Loading dashboard…</p>;
 
   const maxChart = Math.max(...(data.byCategory?.map((c) => c.count) || [1]), 1);
+<<<<<<< HEAD
   const isManager = hasRole(AppRoles.Manager);
+=======
+>>>>>>> 3675464385e6088eef49584f5ff09f221b19cf98
 
   return (
     <>
