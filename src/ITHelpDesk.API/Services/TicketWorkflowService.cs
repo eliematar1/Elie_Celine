@@ -21,9 +21,26 @@ public class TicketWorkflowService
     {
         var isAdmin = roles.Contains(AppRoles.Admin);
         var isAgent = roles.Contains(AppRoles.Agent);
+        var isManager = roles.Contains(AppRoles.Manager);
         var isStaff = isAdmin || isAgent;
         var isUnassigned = string.IsNullOrEmpty(ticket.AssignedToUserId);
         var isOwner = ticket.CreatedByUserId == user.Id;
+
+        if (isManager && !isAdmin)
+        {
+            return new TicketPermissionsDto(
+                IsReadOnly: true,
+                CanEditDetails: false,
+                CanDelete: false,
+                CanAssign: false,
+                CanComment: false,
+                CanUpload: false,
+                CanChangeStatus: false,
+                CanReopen: false,
+                CanDuplicate: false,
+                CanEscalate: false
+            );
+        }
 
         if (state.IsClosed)
         {

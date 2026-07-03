@@ -12,7 +12,7 @@ cd client\it-helpdesk-web && npm run dev  # React (port 5173)
 
 **Login:** `admin@ithelpdesk.local` / `Admin@123` → http://localhost:5173
 
-**Full documentation:** [docs/PROJECT-COMPLETE.md](docs/PROJECT-COMPLETE.md)
+**Full documentation:** [docs/PROJECT-COMPLETE.md](docs/PROJECT-COMPLETE.md) · [Submission checklist](docs/SUBMISSION-CHECKLIST.md)
 
 ---
 

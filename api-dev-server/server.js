@@ -314,8 +314,24 @@ function getTicketPermissions(ticket, user, roles) {
   const state = getTicketState(ticket);
   const isAdmin = hasRole(user, ROLES.Admin);
   const isAgent = hasRole(user, ROLES.Agent);
+  const isManager = hasRole(user, ROLES.Manager);
   const isStaff = isAdmin || isAgent;
   const isOwner = ticket.createdByUserId === user.id;
+
+  if (isManager && !isAdmin) {
+    return {
+      isReadOnly: true,
+      canEditDetails: false,
+      canDelete: false,
+      canAssign: false,
+      canComment: false,
+      canUpload: false,
+      canChangeStatus: false,
+      canReopen: false,
+      canDuplicate: false,
+      canEscalate: false,
+    };
+  }
 
   if (state.isClosed) {
     return {
@@ -973,7 +989,7 @@ app.get('/api/auth/agent-only', authMiddleware, requireRoles(ROLES.Agent), (_req
 });
 
 // ── Users ─────────────────────────────────────────────────────────────────────
-app.get('/api/users', authMiddleware, requireRoles(ROLES.Admin), (_req, res) => {
+app.get('/api/users', authMiddleware, requireRoles(ROLES.Admin, ROLES.Manager), (_req, res) => {
   const result = [...users]
     .sort((a, b) => a.email.localeCompare(b.email))
     .map((u) => ({

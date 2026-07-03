@@ -6,10 +6,10 @@ import { notificationsApi } from '../services/ticketsApi';
 import NotificationToast from './NotificationToast';
 import HelpChatWidget from './HelpChatWidget';
 
-const nav = [
+const baseNav = [
   { to: '/dashboard', label: 'Dashboard', icon: '▣' },
   { to: '/tickets', label: 'Tickets', icon: '☰' },
-  { to: '/tickets/new', label: 'Create Ticket', icon: '＋' },
+  { to: '/tickets/new', label: 'Create Ticket', icon: '＋', hideForManager: true },
   { to: '/notifications', label: 'Notifications', icon: '🔔', badge: true },
   { to: '/profile', label: 'Profile', icon: '👤' },
 ];
@@ -22,6 +22,13 @@ export default function AppLayout() {
   const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
+  const isAdmin = hasRole(AppRoles.Admin);
+  const isManager = hasRole(AppRoles.Manager);
+
+  const nav = baseNav.filter((item) => {
+    if (item.hideForManager && isManager && !isAdmin) return false;
+    return true;
+  });
 
   useEffect(() => {
     notificationsApi.unreadCount()
@@ -47,17 +54,17 @@ export default function AppLayout() {
               {item.badge && unread > 0 ? <span className="nav-badge">{unread}</span> : null}
             </NavLink>
           ))}
-          {(hasRole(AppRoles.Admin) || hasRole(AppRoles.Manager)) &&
+          {(isAdmin || isManager) &&
             managerNav.map((item) => (
               <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
               </NavLink>
             ))}
-          {(hasRole(AppRoles.Admin) || hasRole(AppRoles.Manager)) && (
+          {(isAdmin || isManager) && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
               <span className="nav-icon">⚙</span>
-              Admin
+              {isAdmin ? 'Admin' : 'Team overview'}
             </NavLink>
           )}
         </nav>

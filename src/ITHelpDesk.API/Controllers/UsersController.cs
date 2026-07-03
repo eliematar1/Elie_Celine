@@ -28,7 +28,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = AppRoles.Admin)]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager}")]
     public async Task<IActionResult> List()
     {
         var users = _userManager.Users.OrderBy(u => u.Email).ToList();

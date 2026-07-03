@@ -128,8 +128,12 @@ export default function Admin() {
     <>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Admin panel</h1>
-          <p className="page-sub">User management &amp; system settings (RBAC)</p>
+          <h1 className="page-title">{isAdmin ? 'Admin panel' : 'Team overview'}</h1>
+          <p className="page-sub">
+            {isAdmin
+              ? 'User management & system settings (RBAC)'
+              : 'Monitor team users — read-only access (Manager role)'}
+          </p>
         </div>
         {isAdmin && (
           <button type="button" className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>

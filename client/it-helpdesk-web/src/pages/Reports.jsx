@@ -93,7 +93,7 @@ export default function Reports() {
         </div>
         <div className="btn-group">
           <button type="button" className="btn btn-secondary" onClick={exportCsv}>
-            Export CSV
+            Export Excel (CSV)
           </button>
           <button
             type="button"

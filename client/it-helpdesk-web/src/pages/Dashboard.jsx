@@ -33,7 +33,11 @@ export default function Dashboard() {
             <span className="role-pill">{user?.roles?.[0]}</span>
           </p>
         </div>
-        <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
+        {!hasRole(AppRoles.Manager) || hasRole(AppRoles.Admin) ? (
+          <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
+        ) : (
+          <Link to="/reports" className="btn btn-primary">View Reports</Link>
+        )}
       </div>
 
       <div className="stats-grid">
@@ -103,6 +107,13 @@ export default function Dashboard() {
       {hasRole(AppRoles.Admin) && (
         <div className="card card-alert">
           <strong>Admin</strong> — Manage users and settings in the <Link to="/admin">Admin panel</Link>.
+        </div>
+      )}
+
+      {hasRole(AppRoles.Manager) && !hasRole(AppRoles.Admin) && (
+        <div className="card card-alert">
+          <strong>Manager</strong> — Monitor all team tickets, view user list, and open{' '}
+          <Link to="/reports">Reports &amp; analytics</Link> for performance charts and exports.
         </div>
       )}
     </>

@@ -52,12 +52,18 @@ export default function Login() {
           </button>
         </form>
         <p style={{ marginTop: 16, fontSize: '.9rem', textAlign: 'center' }}>
+          <Link to="/forgot-password">Forgot password?</Link>
+          {' · '}
           No account? <Link to="/register">Register</Link>
         </p>
         <p style={{ marginTop: 8, fontSize: '.8rem', color: '#94a3b8', textAlign: 'center' }}>
           Demo (click to fill):<br />
           <button type="button" className="link-btn" onClick={() => fillDemo('admin@ithelpdesk.local', 'Admin@123')}>
             admin@ithelpdesk.local / Admin@123
+          </button>
+          <br />
+          <button type="button" className="link-btn" onClick={() => fillDemo('manager@ithelpdesk.local', 'Manager@123')}>
+            manager@ithelpdesk.local / Manager@123
           </button>
           <br />
           <button type="button" className="link-btn" onClick={() => fillDemo('agent@ithelpdesk.local', 'Agent@123')}>

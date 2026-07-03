@@ -62,6 +62,7 @@ export default function TicketDetail() {
 
   const p = ticket.permissions || {};
   const isStaff = hasRole(AppRoles.Admin) || hasRole(AppRoles.Agent);
+  const isManagerView = hasRole(AppRoles.Manager) && !hasRole(AppRoles.Admin);
 
   const postComment = async () => {
     setError('');
@@ -185,6 +186,12 @@ export default function TicketDetail() {
           )}
         </div>
       </div>
+
+      {isManagerView && (
+        <div className="card card-alert" style={{ marginBottom: 16 }}>
+          <strong>Manager view</strong> — Read-only monitoring. Use <Link to="/reports">Reports</Link> for team analytics.
+        </div>
+      )}
 
       {error && <div className="error">{error}</div>}
       {p.isReadOnly && (

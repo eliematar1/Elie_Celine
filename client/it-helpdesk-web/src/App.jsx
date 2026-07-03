@@ -12,6 +12,7 @@ import Notifications from './pages/Notifications';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
+import ForgotPassword from './pages/ForgotPassword';
 import { AppRoles } from './constants/roles';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route
         element={
           <ProtectedRoute>
@@ -29,7 +31,11 @@ export default function App() {
       >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/tickets" element={<TicketList />} />
-        <Route path="/tickets/new" element={<CreateTicket />} />
+        <Route path="/tickets/new" element={
+          <ProtectedRoute roles={[AppRoles.Admin, AppRoles.Agent, AppRoles.Employee]}>
+            <CreateTicket />
+          </ProtectedRoute>
+        } />
         <Route path="/tickets/:id" element={<TicketDetail />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/reports" element={
