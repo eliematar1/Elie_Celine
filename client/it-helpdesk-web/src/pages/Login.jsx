@@ -53,11 +53,6 @@ export default function Login() {
         </form>
         <p style={{ marginTop: 16, fontSize: '.9rem', textAlign: 'center' }}>
           <Link to="/forgot-password">Forgot password?</Link>
-<<<<<<< HEAD
-=======
-          {' · '}
-          No account? <Link to="/register">Register</Link>
->>>>>>> 3675464385e6088eef49584f5ff09f221b19cf98
         </p>
         <p style={{ marginTop: 8, fontSize: '.8rem', color: '#94a3b8', textAlign: 'center' }}>
           Demo (click to fill):<br />

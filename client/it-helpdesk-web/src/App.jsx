@@ -3,10 +3,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/AppLayout';
 import Home from './pages/Home';
 import Login from './pages/Login';
-<<<<<<< HEAD
-=======
-import Register from './pages/Register';
->>>>>>> 3675464385e6088eef49584f5ff09f221b19cf98
 import Dashboard from './pages/Dashboard';
 import TicketList from './pages/TicketList';
 import TicketDetail from './pages/TicketDetail';
@@ -23,11 +19,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
-<<<<<<< HEAD
       <Route path="/register" element={<Navigate to="/login" replace />} />
-=======
-      <Route path="/register" element={<Register />} />
->>>>>>> 3675464385e6088eef49584f5ff09f221b19cf98
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route
         element={
