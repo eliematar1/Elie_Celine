@@ -1,0 +1,37 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.Development.json
+appsettings.*.local.json
+
+# Node / React
+node_modules/
+client/**/node_modules/
+dist/
+build/
+client/**/dist/
+.env
+.env.local
+client/**/.env
+client/**/.env.local
+
+# Accidental nested clone
+Elie_Celine/
+
+# IDE
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets
+*.pfx
+secrets.json
+
+# Logs
+*.log

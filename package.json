@@ -1,0 +1,11 @@
+{
+  "name": "it-helpdesk",
+  "version": "1.0.0",
+  "description": "IT Help Desk — Week 1 runnable preview (wireframes + diagrams)",
+  "scripts": {
+    "start": "node server.js",
+    "wireframes": "npx --yes serve wireframes -l 3000",
+    "diagrams": "npx --yes serve diagrams -l 3001"
+  },
+  "private": true
+}
