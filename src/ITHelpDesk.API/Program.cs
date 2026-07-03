@@ -71,6 +71,7 @@ builder.Services.AddScoped<ActivityLogService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<TicketService>();
 builder.Services.AddScoped<AiService>();
+builder.Services.AddScoped<SystemSettingsService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

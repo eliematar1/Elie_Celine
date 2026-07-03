@@ -15,7 +15,7 @@ namespace ITHelpDesk.API.Controllers;
 public class TicketsController : ControllerBase
 {
     private const int MaxAttachmentsPerTicket = 5;
-    private const long MaxAttachmentBytes = 5_242_880; // 5 MB
+    private const long UploadSizeCapBytes = 52_428_800; // 50 MB hard cap for request pipeline
 
     private readonly ApplicationDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
@@ -23,11 +23,12 @@ public class TicketsController : ControllerBase
     private readonly NotificationService _notifications;
     private readonly ActivityLogService _activity;
     private readonly AiService _ai;
+    private readonly SystemSettingsService _settings;
 
     public TicketsController(
         ApplicationDbContext db, UserManager<ApplicationUser> userManager,
         TicketService tickets, NotificationService notifications,
-        ActivityLogService activity, AiService ai)
+        ActivityLogService activity, AiService ai, SystemSettingsService settings)
     {
         _db = db;
         _userManager = userManager;
@@ -35,6 +36,7 @@ public class TicketsController : ControllerBase
         _notifications = notifications;
         _activity = activity;
         _ai = ai;
+        _settings = settings;
     }
 
     [HttpGet]
@@ -84,10 +86,15 @@ public class TicketsController : ControllerBase
         await _db.SaveChangesAsync();
 
         await _tickets.LogStatusChangeAsync(ticket, null, openStatus.Id, user.Id, "Ticket created");
+        await _settings.ApplyAutoAssignAsync(ticket, user.Id, _tickets);
         await _db.SaveChangesAsync();
         await _activity.LogAsync(user.Id, "TicketCreated", "Ticket", ticket.Id.ToString(), ticket.ReferenceNumber);
         await _notifications.NotifyAsync(user.Id, "Ticket created", $"Your ticket {ticket.ReferenceNumber} was submitted.", "TicketCreated", ticket.Id);
-        await _notifications.NotifyStaffNewTicketAsync(ticket, user.Id);
+        if (ticket.AssignedToUserId != null)
+            await _notifications.NotifyTicketInvolvedAsync(ticket.Id, "Ticket assigned",
+                $"{ticket.ReferenceNumber} was auto-assigned.", "Assignment", user.Id);
+        else
+            await _notifications.NotifyStaffNewTicketAsync(ticket, user.Id);
 
         return CreatedAtAction(nameof(Get), new { id = ticket.Id }, await GetDto(ticket.Id, user, roles));
     }
@@ -266,7 +273,7 @@ public class TicketsController : ControllerBase
     }
 
     [HttpPost("{id:int}/attachments")]
-    [RequestSizeLimit(MaxAttachmentBytes)]
+    [RequestSizeLimit(UploadSizeCapBytes)]
     public async Task<IActionResult> Upload(int id, IFormFile file)
     {
         var (user, roles) = await GetUserAsync();
@@ -278,9 +285,12 @@ public class TicketsController : ControllerBase
         if (!permissions.CanUpload)
             return BadRequest(new { message = "Attachments are not allowed on closed tickets." });
 
+        var maxBytes = await _settings.GetMaxAttachmentBytesAsync();
+        var maxMb = maxBytes / (1024 * 1024);
+
         if (file.Length == 0) return BadRequest(new { message = "Empty file." });
-        if (file.Length > MaxAttachmentBytes)
-            return BadRequest(new { message = "File exceeds 5 MB limit." });
+        if (file.Length > maxBytes)
+            return BadRequest(new { message = $"File exceeds {maxMb} MB limit." });
 
         var count = await _db.TicketAttachments.CountAsync(a => a.TicketId == id);
         if (count >= MaxAttachmentsPerTicket)
@@ -289,7 +299,7 @@ public class TicketsController : ControllerBase
         var allowed = new[] { ".png", ".jpg", ".jpeg", ".webp", ".pdf", ".txt", ".log" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!allowed.Contains(ext))
-            return BadRequest(new { message = "Allowed: PNG, JPG, WEBP, PDF, TXT, LOG (max 5 MB)." });
+            return BadRequest(new { message = $"Allowed: PNG, JPG, WEBP, PDF, TXT, LOG (max {maxMb} MB)." });
 
         var stored = $"{Guid.NewGuid()}{ext}";
         var path = Path.Combine("uploads", stored);

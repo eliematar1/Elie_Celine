@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AppRoles } from '../constants/roles';
-import { usersApi } from '../services/api';
+import { usersApi, settingsApi } from '../services/api';
 
 const emptyForm = {
   email: '',
@@ -24,6 +24,9 @@ export default function Admin() {
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
+  const [settings, setSettings] = useState({ autoAssignEnabled: false, maxAttachmentSizeMb: 10 });
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const loadUsers = () => {
     usersApi
@@ -36,6 +39,12 @@ export default function Admin() {
     loadUsers();
     if (isAdmin) {
       usersApi.roles().then((res) => setRoles(res.data)).catch(() => {});
+      settingsApi.get()
+        .then((res) => {
+          setSettings(res.data);
+          setSettingsLoaded(true);
+        })
+        .catch(() => setSettingsLoaded(true));
     }
   }, [isAdmin]);
 
@@ -99,6 +108,21 @@ export default function Admin() {
   };
 
   const canDeleteUser = (u) => !u.lastLoginAt;
+
+  const saveSettings = async () => {
+    setError('');
+    setSuccess('');
+    setSettingsBusy(true);
+    try {
+      const { data } = await settingsApi.update(settings);
+      setSettings(data);
+      setSuccess('System settings saved.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to save settings.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
 
   return (
     <>
@@ -227,9 +251,39 @@ export default function Admin() {
       {isAdmin && (
         <div className="card">
           <h3 className="card-title">System settings</h3>
-          <p>Auto-assign tickets: <input type="checkbox" /></p>
-          <p style={{ marginTop: 8 }}>Max attachment (MB): <input type="number" defaultValue={10} style={{ width: 60 }} /></p>
-          <button type="button" className="btn btn-primary" style={{ marginTop: 12 }}>Save settings</button>
+          <p className="text-muted" style={{ marginBottom: 16 }}>
+            Control auto-assignment for new tickets and the maximum attachment size allowed on tickets.
+          </p>
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <input
+              type="checkbox"
+              checked={settings.autoAssignEnabled}
+              onChange={(e) => setSettings((s) => ({ ...s, autoAssignEnabled: e.target.checked }))}
+              disabled={!settingsLoaded || settingsBusy}
+            />
+            Auto-assign new tickets to the least-loaded IT agent
+          </label>
+          <p style={{ marginTop: 8 }}>
+            Max attachment (MB):{' '}
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={settings.maxAttachmentSizeMb}
+              onChange={(e) => setSettings((s) => ({ ...s, maxAttachmentSizeMb: Number(e.target.value) }))}
+              style={{ width: 72 }}
+              disabled={!settingsLoaded || settingsBusy}
+            />
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ marginTop: 12 }}
+            onClick={saveSettings}
+            disabled={!settingsLoaded || settingsBusy}
+          >
+            {settingsBusy ? 'Saving…' : 'Save settings'}
+          </button>
         </div>
       )}
     </>

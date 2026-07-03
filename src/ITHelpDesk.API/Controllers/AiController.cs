@@ -18,16 +18,19 @@ public class AiController : ControllerBase
     private readonly TicketService _tickets;
     private readonly NotificationService _notifications;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly SystemSettingsService _settings;
 
     public AiController(
         AiService ai, ApplicationDbContext db, TicketService tickets,
-        NotificationService notifications, UserManager<ApplicationUser> userManager)
+        NotificationService notifications, UserManager<ApplicationUser> userManager,
+        SystemSettingsService settings)
     {
         _ai = ai;
         _db = db;
         _tickets = tickets;
         _notifications = notifications;
         _userManager = userManager;
+        _settings = settings;
     }
 
     [HttpPost("suggest")]
@@ -92,11 +95,17 @@ public class AiController : ControllerBase
         };
         _db.Tickets.Add(ticket);
         await _db.SaveChangesAsync();
+
         await _tickets.LogStatusChangeAsync(ticket, null, openStatus.Id, user.Id, "Ticket created via AI");
+        await _settings.ApplyAutoAssignAsync(ticket, user!.Id, _tickets);
         await _db.SaveChangesAsync();
 
         await _notifications.NotifyAsync(user.Id, "Ticket created", $"AI created {ticket.ReferenceNumber} for you.", "TicketCreated", ticket.Id);
-        await _notifications.NotifyStaffNewTicketAsync(ticket, user.Id);
+        if (ticket.AssignedToUserId != null)
+            await _notifications.NotifyTicketInvolvedAsync(ticket.Id, "Ticket assigned",
+                $"{ticket.ReferenceNumber} was auto-assigned.", "Assignment", user.Id);
+        else
+            await _notifications.NotifyStaffNewTicketAsync(ticket, user.Id);
 
         return Created($"/api/tickets/{ticket.Id}", new
         {

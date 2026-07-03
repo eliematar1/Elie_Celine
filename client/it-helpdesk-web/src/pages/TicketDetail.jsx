@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { ticketsApi } from '../services/ticketsApi';
-import { usersApi } from '../services/api';
+import { usersApi, settingsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { AppRoles } from '../constants/roles';
 
@@ -36,6 +36,7 @@ export default function TicketDetail() {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [maxAttachmentMb, setMaxAttachmentMb] = useState(10);
 
   const load = () => ticketsApi.get(id).then((res) => {
     setTicket(res.data);
@@ -51,6 +52,7 @@ export default function TicketDetail() {
   useEffect(() => {
     load();
     ticketsApi.lookups().then((r) => setLookups(r.data));
+    settingsApi.get().then((r) => setMaxAttachmentMb(r.data.maxAttachmentSizeMb)).catch(() => {});
     if (hasRole(AppRoles.Admin) || hasRole(AppRoles.Agent)) {
       usersApi.agents().then((r) => setAgents(r.data)).catch(() => {});
     }
@@ -145,6 +147,12 @@ export default function TicketDetail() {
     const file = e.target.files?.[0];
     if (!file) return;
     setError('');
+    const maxBytes = maxAttachmentMb * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setError(`File exceeds ${maxAttachmentMb} MB limit.`);
+      e.target.value = '';
+      return;
+    }
     try {
       await ticketsApi.upload(id, file);
       e.target.value = '';
@@ -285,7 +293,9 @@ export default function TicketDetail() {
 
           <div className="card">
             <h3 className="card-title">Attachments</h3>
-            <p className="text-muted" style={{ marginBottom: 12 }}>PNG, JPG, WEBP, PDF, TXT, LOG — max 5 MB, up to 5 files</p>
+            <p className="text-muted" style={{ marginBottom: 12 }}>
+              PNG, JPG, WEBP, PDF, TXT, LOG — max {maxAttachmentMb} MB, up to 5 files
+            </p>
             {ticket.attachments?.map((a) => (
               <p key={a.id}>📎 {a.fileName} <span className="text-muted">({Math.round(a.fileSizeBytes / 1024)} KB)</span></p>
             ))}

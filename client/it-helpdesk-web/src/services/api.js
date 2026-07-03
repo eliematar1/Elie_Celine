@@ -41,3 +41,8 @@ export const usersApi = {
   remove: (id) => api.delete(`/api/users/${id}`),
   agents: () => api.get('/api/users/agents'),
 };
+
+export const settingsApi = {
+  get: () => api.get('/api/settings'),
+  update: (data) => api.put('/api/settings', data),
+};

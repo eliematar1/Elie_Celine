@@ -40,6 +40,13 @@ let categories = [];
 let priorities = [];
 let statuses = [];
 
+let systemSettings = {
+  autoAssignEnabled: false,
+  maxAttachmentSizeMb: 10,
+  updatedAt: null,
+  updatedByUserId: null,
+};
+
 let nextUserId = 1;
 let nextTicketId = 1;
 let nextCommentId = 1;
@@ -209,7 +216,87 @@ function mapTicketList(t) {
 
 const WORKING_STATUSES = new Set(['In Progress', 'Pending']);
 const MAX_ATTACHMENTS = 5;
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const UPLOAD_SIZE_CAP_BYTES = 50 * 1024 * 1024;
+
+function getMaxAttachmentMb() {
+  return Math.min(Math.max(Number(systemSettings.maxAttachmentSizeMb) || 10, 1), 50);
+}
+
+function getMaxAttachmentBytes() {
+  return getMaxAttachmentMb() * 1024 * 1024;
+}
+
+function pickAutoAssignAgentId() {
+  if (!systemSettings.autoAssignEnabled) return null;
+  const agents = users.filter((u) => u.isActive !== false && hasRole(u, ROLES.Agent));
+  if (!agents.length) return null;
+
+  const closedIds = new Set(statuses.filter((s) => s.isClosed).map((s) => s.id));
+  let best = agents[0];
+  let bestCount = Infinity;
+  for (const agent of agents) {
+    const count = tickets.filter(
+      (t) => !t.isDeleted && t.assignedToUserId === agent.id && !closedIds.has(t.statusId),
+    ).length;
+    if (count < bestCount) {
+      bestCount = count;
+      best = agent;
+    }
+  }
+  return best.id;
+}
+
+function applyAutoAssign(ticket, actorUserId) {
+  const agentId = pickAutoAssignAgentId();
+  if (!agentId) return null;
+
+  ticket.assignedToUserId = agentId;
+  ticket.updatedAt = new Date().toISOString();
+
+  const openStatus = getStatusByName('Open');
+  if (ticket.statusId === openStatus?.id) {
+    const inProgress = getStatusByName('In Progress');
+    logStatusChange(ticket, ticket.statusId, inProgress.id, actorUserId, 'Auto-assigned to agent');
+  }
+
+  assignments.push({
+    id: nextAssignmentId++,
+    ticketId: ticket.id,
+    assignedToUserId: agentId,
+    assignedByUserId: actorUserId,
+    assignedAt: new Date().toISOString(),
+    notes: 'Auto-assigned by system',
+    isEscalation: false,
+  });
+
+  return agentId;
+}
+
+function finalizeNewTicket(ticket, actorUserId, creationNote, notifyMessage = null) {
+  const openStatus = getStatusByName('Open');
+  logStatusChange(ticket, null, openStatus.id, actorUserId, creationNote);
+  logActivity(actorUserId, 'TicketCreated', 'Ticket', ticket.id, ticket.referenceNumber);
+  notify(
+    actorUserId,
+    'Ticket created',
+    notifyMessage || `Your ticket ${ticket.referenceNumber} was submitted.`,
+    'TicketCreated',
+    ticket.id,
+  );
+
+  const assignedId = applyAutoAssign(ticket, actorUserId);
+  if (assignedId) {
+    notifyInvolved(
+      ticket.id,
+      'Ticket assigned',
+      `${ticket.referenceNumber} auto-assigned to ${fullName(findUser(assignedId))}.`,
+      'Assignment',
+      actorUserId,
+    );
+  } else {
+    notifyStaffNewTicket(ticket, actorUserId);
+  }
+}
 
 function getTicketState(ticket) {
   const st = getStatus(ticket.statusId);
@@ -782,7 +869,7 @@ const upload = multer({
       cb(null, `${crypto.randomUUID()}${ext}`);
     },
   }),
-  limits: { fileSize: MAX_ATTACHMENT_BYTES },
+  limits: { fileSize: UPLOAD_SIZE_CAP_BYTES },
 });
 
 // ── App setup ─────────────────────────────────────────────────────────────────
@@ -1009,6 +1096,28 @@ app.delete('/api/users/:id', authMiddleware, requireRoles(ROLES.Admin), async (r
   res.status(204).send();
 });
 
+// ── System settings ───────────────────────────────────────────────────────────
+app.get('/api/settings', authMiddleware, (_req, res) => {
+  res.json({
+    autoAssignEnabled: Boolean(systemSettings.autoAssignEnabled),
+    maxAttachmentSizeMb: getMaxAttachmentMb(),
+  });
+});
+
+app.put('/api/settings', authMiddleware, requireRoles(ROLES.Admin), (req, res) => {
+  const { autoAssignEnabled, maxAttachmentSizeMb } = req.body || {};
+  const mb = Math.min(Math.max(Number(maxAttachmentSizeMb) || 10, 1), 50);
+  systemSettings.autoAssignEnabled = Boolean(autoAssignEnabled);
+  systemSettings.maxAttachmentSizeMb = mb;
+  systemSettings.updatedAt = new Date().toISOString();
+  systemSettings.updatedByUserId = req.user.id;
+  logActivity(req.user.id, 'SettingsUpdated', 'SystemSettings', 'settings', `autoAssign=${systemSettings.autoAssignEnabled}, maxMb=${mb}`);
+  res.json({
+    autoAssignEnabled: systemSettings.autoAssignEnabled,
+    maxAttachmentSizeMb: mb,
+  });
+});
+
 // ── Tickets — lookups BEFORE :id routes ───────────────────────────────────────
 app.get('/api/tickets/lookups', (_req, res) => {
   res.json({
@@ -1067,10 +1176,7 @@ app.post('/api/tickets', authMiddleware, (req, res) => {
     isDeleted: false,
   };
   tickets.push(ticket);
-  logStatusChange(ticket, null, openStatus.id, req.user.id, 'Ticket created');
-  logActivity(req.user.id, 'TicketCreated', 'Ticket', ticket.id, ticket.referenceNumber);
-  notify(req.user.id, 'Ticket created', `Your ticket ${ticket.referenceNumber} was submitted.`, 'TicketCreated', ticket.id);
-  notifyStaffNewTicket(ticket, req.user.id);
+  finalizeNewTicket(ticket, req.user.id, 'Ticket created');
   res.status(201).location(`/api/tickets/${ticket.id}`).json(mapTicketDetail(ticket, req.user, req.userRoles));
 });
 
@@ -1159,7 +1265,7 @@ app.post('/api/tickets/:id/duplicate', authMiddleware, (req, res) => {
     isDeleted: false,
   };
   tickets.push(ticket);
-  logStatusChange(ticket, null, openStatus.id, req.user.id, `Duplicated from ${source.referenceNumber}`);
+  finalizeNewTicket(ticket, req.user.id, `Duplicated from ${source.referenceNumber}`);
   res.status(201).json(mapTicketDetail(ticket, req.user, req.userRoles));
 });
 
@@ -1241,10 +1347,12 @@ app.post('/api/tickets/:id/attachments', authMiddleware, upload.single('file'), 
   }
 
   const file = req.file;
+  const maxBytes = getMaxAttachmentBytes();
+  const maxMb = getMaxAttachmentMb();
   if (!file || file.size === 0) return res.status(400).json({ message: 'Empty file.' });
-  if (file.size > MAX_ATTACHMENT_BYTES) {
+  if (file.size > maxBytes) {
     fs.unlinkSync(file.path);
-    return res.status(400).json({ message: 'File exceeds 5 MB limit.' });
+    return res.status(400).json({ message: `File exceeds ${maxMb} MB limit.` });
   }
 
   const count = attachments.filter((a) => a.ticketId === id).length;
@@ -1257,7 +1365,7 @@ app.post('/api/tickets/:id/attachments', authMiddleware, upload.single('file'), 
   const ext = path.extname(file.originalname).toLowerCase();
   if (!allowed.includes(ext)) {
     fs.unlinkSync(file.path);
-    return res.status(400).json({ message: 'Allowed: PNG, JPG, WEBP, PDF, TXT, LOG (max 5 MB).' });
+    return res.status(400).json({ message: `Allowed: PNG, JPG, WEBP, PDF, TXT, LOG (max ${maxMb} MB).` });
   }
 
   attachments.push({
@@ -1549,10 +1657,7 @@ app.post('/api/ai/create-ticket', authMiddleware, async (req, res) => {
     isDeleted: false,
   };
   tickets.push(ticket);
-  logStatusChange(ticket, null, openStatus.id, req.user.id, 'Ticket created via AI');
-  logActivity(req.user.id, 'TicketCreated', 'Ticket', ticket.id, ticket.referenceNumber);
-  notify(req.user.id, 'Ticket created', `AI created ${ticket.referenceNumber} for you.`, 'TicketCreated', ticket.id);
-  notifyStaffNewTicket(ticket, req.user.id);
+  finalizeNewTicket(ticket, req.user.id, 'Ticket created via AI', `AI created ${ticket.referenceNumber} for you.`);
 
   res.status(201).json({
     ticket: mapTicketDetail(ticket, req.user, req.userRoles),
