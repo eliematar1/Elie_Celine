@@ -3,33 +3,54 @@ import { Link } from 'react-router-dom';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { ticketsApi } from '../services/ticketsApi';
-import { useAuth } from '../context/AuthContext';
-import { canCreateTickets } from '../constants/roles';
 
 export default function TicketList() {
-  const { hasRole } = useAuth();
   const [tickets, setTickets] = useState([]);
-  const [lookups, setLookups] = useState({ statuses: [], categories: [] });
+  const [categories, setCategories] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [search, setSearch] = useState('');
-  const [statusId, setStatusId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
-    setLoading(true);
-    ticketsApi.list({
-      search: search || undefined,
-      statusId: statusId || undefined,
-      categoryId: categoryId || undefined,
-    })
-      .then((res) => setTickets(res.data))
-      .finally(() => setLoading(false));
-  };
-
   useEffect(() => {
-    ticketsApi.lookups().then((res) => setLookups(res.data));
-    load();
+    let active = true;
+    const loadTickets = async () => {
+      try {
+        const [{ data: ticketData }, { data: lookupData }] = await Promise.all([ticketsApi.list(), ticketsApi.lookups()]);
+        if (!active) return;
+        setTickets((ticketData || []).map((item) => ({
+          id: item.id,
+          ref: item.referenceNumber,
+          title: item.title,
+          category: item.category,
+          priority: item.priority,
+          status: item.status,
+          agent: item.assignedToName || 'Unassigned',
+          created: new Date(item.createdAt).toLocaleDateString(),
+        })));
+        setCategories((lookupData.categories || []).map((c) => c.name));
+        setStatuses((lookupData.statuses || []).map((s) => s.name));
+      } catch (err) {
+        console.error('Failed to load tickets', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadTickets();
+    return () => {
+      active = false;
+    };
   }, []);
+
+  const filtered = tickets.filter((t) => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || t.title.toLowerCase().includes(q) || t.ref.toLowerCase().includes(q);
+    const matchStatus = !statusFilter || t.status === statusFilter;
+    const matchCat = !categoryFilter || t.category === categoryFilter;
+    return matchSearch && matchStatus && matchCat;
+  });
 
   return (
     <>
@@ -38,49 +59,64 @@ export default function TicketList() {
           <h1 className="page-title">Tickets</h1>
           <p className="page-sub">Manage and track support requests</p>
         </div>
-        {canCreateTickets(hasRole) && (
-          <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
-        )}
+        <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
       </div>
 
       <div className="card filters-card">
-        <input type="search" className="filter-input" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select value={statusId} onChange={(e) => setStatusId(e.target.value)}>
+        <input
+          type="search"
+          className="filter-input"
+          placeholder="Search reference or title…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
-          {lookups.statuses?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">All categories</option>
-          {lookups.categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <button type="button" className="btn btn-primary" onClick={load}>Filter</button>
-        <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setStatusId(''); setCategoryId(''); setTimeout(load, 0); }}>Clear</button>
+        <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setStatusFilter(''); setCategoryFilter(''); }}>
+          Clear
+        </button>
       </div>
 
       <div className="card">
-        {loading ? <p className="empty-state">Loading…</p> : (
+        {loading ? (
+          <p className="text-muted">Loading tickets…</p>
+        ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>Reference</th><th>Title</th><th>Category</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Created</th></tr>
+                <tr>
+                  <th>Reference</th>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Assigned</th>
+                  <th>Created</th>
+                </tr>
               </thead>
               <tbody>
-                {tickets.map((t) => (
+                {filtered.map((t) => (
                   <tr key={t.id}>
-                    <td><Link to={`/tickets/${t.id}`} className="ref-link">{t.referenceNumber}</Link></td>
+                    <td><Link to={`/tickets/${t.id}`} className="ref-link">{t.ref}</Link></td>
                     <td>{t.title}</td>
                     <td>{t.category}</td>
                     <td><PriorityBadge priority={t.priority} /></td>
                     <td><StatusBadge status={t.status} /></td>
-                    <td>{t.assignedToName || '—'}</td>
-                    <td className="text-muted">{new Date(t.createdAt).toLocaleDateString()}</td>
+                    <td>{t.agent}</td>
+                    <td className="text-muted">{t.created}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {tickets.length === 0 && <p className="empty-state">No tickets found.</p>}
           </div>
         )}
+        {!loading && filtered.length === 0 && <p className="empty-state">No tickets match your filters.</p>}
       </div>
     </>
   );

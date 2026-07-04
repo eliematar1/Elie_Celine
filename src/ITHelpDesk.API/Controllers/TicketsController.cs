@@ -14,21 +14,17 @@ namespace ITHelpDesk.API.Controllers;
 [Authorize]
 public class TicketsController : ControllerBase
 {
-    private const int MaxAttachmentsPerTicket = 5;
-    private const long UploadSizeCapBytes = 52_428_800; // 50 MB hard cap for request pipeline
-
     private readonly ApplicationDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly TicketService _tickets;
     private readonly NotificationService _notifications;
     private readonly ActivityLogService _activity;
     private readonly AiService _ai;
-    private readonly SystemSettingsService _settings;
 
     public TicketsController(
         ApplicationDbContext db, UserManager<ApplicationUser> userManager,
         TicketService tickets, NotificationService notifications,
-        ActivityLogService activity, AiService ai, SystemSettingsService settings)
+        ActivityLogService activity, AiService ai)
     {
         _db = db;
         _userManager = userManager;
@@ -36,7 +32,6 @@ public class TicketsController : ControllerBase
         _notifications = notifications;
         _activity = activity;
         _ai = ai;
-        _settings = settings;
     }
 
     [HttpGet]
@@ -59,19 +54,23 @@ public class TicketsController : ControllerBase
     public async Task<ActionResult<TicketDetailDto>> Get(int id)
     {
         var (user, roles) = await GetUserAsync();
-        var ticket = await LoadTicketDetail(id, user, roles);
+        var ticket = await _tickets.QueryForUser(user, roles)
+            .Include(t => t.Comments).ThenInclude(c => c.User)
+            .Include(t => t.Attachments)
+            .Include(t => t.StatusHistory).ThenInclude(h => h.ToStatus)
+            .Include(t => t.StatusHistory).ThenInclude(h => h.FromStatus)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
         if (ticket == null) return NotFound();
-        return Ok(MapDetail(ticket, user, roles));
+        return Ok(MapDetail(ticket, roles));
     }
 
     [HttpPost]
     public async Task<ActionResult<TicketDetailDto>> Create([FromBody] CreateTicketRequest request)
     {
         var (user, roles) = await GetUserAsync();
-        if (!roles.Any(r => r is AppRoles.Admin or AppRoles.Employee))
-            return StatusCode(403, new { message = "Only employees and administrators can create tickets." });
-
         var openStatus = await _db.TicketStatuses.FirstAsync(s => s.Name == "Open");
+        var (suggestedCat, suggestedPri) = _ai.Suggest(request.Title, request.Description);
 
         var ticket = new Ticket
         {
@@ -89,15 +88,16 @@ public class TicketsController : ControllerBase
         await _db.SaveChangesAsync();
 
         await _tickets.LogStatusChangeAsync(ticket, null, openStatus.Id, user.Id, "Ticket created");
-        await _settings.ApplyAutoAssignAsync(ticket, user.Id, _tickets);
         await _db.SaveChangesAsync();
+
+        var recipientIds = new List<string> { user.Id };
+        foreach (var recipient in (await _userManager.GetUsersInRoleAsync(AppRoles.Admin)).Concat(await _userManager.GetUsersInRoleAsync(AppRoles.Manager)).Concat(await _userManager.GetUsersInRoleAsync(AppRoles.Agent)))
+            if (recipient.Id != user.Id && !recipientIds.Contains(recipient.Id)) recipientIds.Add(recipient.Id);
+
+        foreach (var recipientId in recipientIds)
+            await _notifications.NotifyAsync(recipientId, "New ticket created", $"{ticket.ReferenceNumber} was created and is awaiting review.", "TicketCreated", ticket.Id);
+
         await _activity.LogAsync(user.Id, "TicketCreated", "Ticket", ticket.Id.ToString(), ticket.ReferenceNumber);
-        await _notifications.NotifyAsync(user.Id, "Ticket created", $"Your ticket {ticket.ReferenceNumber} was submitted.", "TicketCreated", ticket.Id);
-        if (ticket.AssignedToUserId != null)
-            await _notifications.NotifyTicketInvolvedAsync(ticket.Id, "Ticket assigned",
-                $"{ticket.ReferenceNumber} was auto-assigned.", "Assignment", user.Id);
-        else
-            await _notifications.NotifyStaffNewTicketAsync(ticket, user.Id);
 
         return CreatedAtAction(nameof(Get), new { id = ticket.Id }, await GetDto(ticket.Id, user, roles));
     }
@@ -106,51 +106,46 @@ public class TicketsController : ControllerBase
     public async Task<ActionResult<TicketDetailDto>> Update(int id, [FromBody] UpdateTicketRequest request)
     {
         var (user, roles) = await GetUserAsync();
-        var ticket = await LoadTicketDetail(id, user, roles);
+        var ticket = await _tickets.GetByIdForUserAsync(id, user, roles);
         if (ticket == null) return NotFound();
 
-        var state = TicketWorkflowService.GetState(ticket.Status);
-        var permissions = TicketWorkflowService.GetPermissions(ticket, state, user, roles);
+        if (request.Title != null) ticket.Title = request.Title;
+        if (request.Description != null) ticket.Description = request.Description;
+        if (request.CategoryId.HasValue) ticket.CategoryId = request.CategoryId.Value;
+        if (request.PriorityId.HasValue) ticket.PriorityId = request.PriorityId.Value;
 
         if (request.StatusId.HasValue && request.StatusId != ticket.StatusId)
         {
-            if (!permissions.CanChangeStatus)
-                return BadRequest(new { message = "Status cannot be changed for this ticket." });
             var fromId = ticket.StatusId;
+            var toStatus = await _db.TicketStatuses.FindAsync(request.StatusId.Value);
             await _tickets.LogStatusChangeAsync(ticket, fromId, request.StatusId.Value, user.Id);
-            await _notifications.NotifyTicketInvolvedAsync(ticket.Id, "Status updated",
-                $"{ticket.ReferenceNumber} status changed.", "StatusChange", user.Id);
-        }
-        else
-        {
-            if (!permissions.CanEditDetails)
-                return BadRequest(new { message = "Ticket details cannot be edited while in progress or closed." });
 
-            if (request.Title != null) ticket.Title = request.Title;
-            if (request.Description != null) ticket.Description = request.Description;
-            if (request.CategoryId.HasValue) ticket.CategoryId = request.CategoryId.Value;
-            if (request.PriorityId.HasValue) ticket.PriorityId = request.PriorityId.Value;
-            ticket.UpdatedAt = DateTime.UtcNow;
-            await _notifications.NotifyTicketInvolvedAsync(ticket.Id, "Ticket updated",
-                $"{ticket.ReferenceNumber} details were updated.", "TicketUpdated", user.Id);
+            var recipientIds = new List<string>();
+            if (!string.IsNullOrWhiteSpace(ticket.CreatedByUserId) && ticket.CreatedByUserId != user.Id) recipientIds.Add(ticket.CreatedByUserId);
+            if (!string.IsNullOrWhiteSpace(ticket.AssignedToUserId) && ticket.AssignedToUserId != user.Id) recipientIds.Add(ticket.AssignedToUserId);
+
+            var title = toStatus?.Name is "Resolved" or "Closed" ? "Ticket completed" : "Status updated";
+            var message = toStatus?.Name is "Resolved" or "Closed"
+                ? $"{ticket.ReferenceNumber} has been marked {toStatus.Name}."
+                : $"{ticket.ReferenceNumber} status changed to {toStatus?.Name ?? request.StatusId.Value.ToString()}.";
+
+            foreach (var recipientId in recipientIds.Distinct())
+                await _notifications.NotifyAsync(recipientId, title, message, "StatusChange", ticket.Id);
         }
+        else ticket.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
         return Ok(await GetDto(id, user, roles));
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = AppRoles.Admin)]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Employee}")]
     public async Task<IActionResult> Delete(int id)
     {
         var (user, roles) = await GetUserAsync();
-        var ticket = await LoadTicketDetail(id, user, roles);
+        var ticket = await _tickets.GetByIdForUserAsync(id, user, roles);
         if (ticket == null) return NotFound();
-
-        var permissions = TicketWorkflowService.GetPermissions(
-            ticket, TicketWorkflowService.GetState(ticket.Status), user, roles);
-        if (!permissions.CanDelete)
-            return BadRequest(new { message = "Only unassigned open tickets can be deleted." });
+        if (!roles.Contains(AppRoles.Admin) && ticket.CreatedByUserId != user.Id) return Forbid();
 
         ticket.IsDeleted = true;
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -158,82 +153,16 @@ public class TicketsController : ControllerBase
         return NoContent();
     }
 
-    [HttpPost("{id:int}/reopen")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent}")]
-    public async Task<ActionResult<TicketDetailDto>> Reopen(int id)
-    {
-        var (user, roles) = await GetUserAsync();
-        var ticket = await LoadTicketDetail(id, user, roles);
-        if (ticket == null) return NotFound();
-
-        var permissions = TicketWorkflowService.GetPermissions(
-            ticket, TicketWorkflowService.GetState(ticket.Status), user, roles);
-        if (!permissions.CanReopen)
-            return BadRequest(new { message = "This ticket cannot be reopened." });
-
-        var openStatus = await _db.TicketStatuses.FirstAsync(s => s.Name == "Open");
-        await _tickets.LogStatusChangeAsync(ticket, ticket.StatusId, openStatus.Id, user.Id, "Ticket reopened");
-        ticket.ResolvedAt = null;
-        ticket.ClosedAt = null;
-        await _db.SaveChangesAsync();
-        return Ok(await GetDto(id, user, roles));
-    }
-
-    [HttpPost("{id:int}/duplicate")]
-    public async Task<ActionResult<TicketDetailDto>> Duplicate(int id)
-    {
-        var (user, roles) = await GetUserAsync();
-        if (!roles.Any(r => r is AppRoles.Admin or AppRoles.Employee))
-            return StatusCode(403, new { message = "Only employees and administrators can create tickets." });
-
-        var source = await LoadTicketDetail(id, user, roles);
-        if (source == null) return NotFound();
-
-        var openStatus = await _db.TicketStatuses.FirstAsync(s => s.Name == "Open");
-        var ticket = new Ticket
-        {
-            ReferenceNumber = await _tickets.GenerateReferenceAsync(),
-            Title = $"Copy: {source.Title}",
-            Description = source.Description,
-            CategoryId = source.CategoryId,
-            PriorityId = source.PriorityId,
-            StatusId = openStatus.Id,
-            CreatedByUserId = user.Id,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-        _db.Tickets.Add(ticket);
-        await _db.SaveChangesAsync();
-        await _tickets.LogStatusChangeAsync(ticket, null, openStatus.Id, user.Id, $"Duplicated from {source.ReferenceNumber}");
-        await _db.SaveChangesAsync();
-        return CreatedAtAction(nameof(Get), new { id = ticket.Id }, await GetDto(ticket.Id, user, roles));
-    }
-
     [HttpPost("{id:int}/assign")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent},{AppRoles.Manager}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Agent}")]
     public async Task<IActionResult> Assign(int id, [FromBody] AssignTicketRequest request)
     {
         var (user, roles) = await GetUserAsync();
-        var ticket = await LoadTicketDetail(id, user, roles);
+        var ticket = await _tickets.GetByIdForUserAsync(id, user, roles);
         if (ticket == null) return NotFound();
-
-        var permissions = TicketWorkflowService.GetPermissions(
-            ticket, TicketWorkflowService.GetState(ticket.Status), user, roles);
-        if (!permissions.CanAssign)
-            return BadRequest(new { message = "Assignment is not allowed for this ticket." });
-
-        if (request.IsEscalation && !permissions.CanEscalate)
-            return BadRequest(new { message = "Only admins can escalate tickets." });
 
         ticket.AssignedToUserId = request.AssignedToUserId;
         ticket.UpdatedAt = DateTime.UtcNow;
-
-        if (ticket.Status.Name == "Open")
-        {
-            var inProgress = await _db.TicketStatuses.FirstAsync(s => s.Name == "In Progress");
-            await _tickets.LogStatusChangeAsync(ticket, ticket.StatusId, inProgress.Id, user.Id, "Assigned to agent");
-        }
-
         _db.TicketAssignments.Add(new TicketAssignment
         {
             TicketId = id,
@@ -243,25 +172,17 @@ public class TicketsController : ControllerBase
             IsEscalation = request.IsEscalation
         });
         await _db.SaveChangesAsync();
-
-        var title = request.IsEscalation ? "Ticket escalated" : "Ticket assigned";
-        await _notifications.NotifyTicketInvolvedAsync(id, title,
-            $"{ticket.ReferenceNumber} was assigned.", "Assignment", user.Id);
-        return Ok(new { message = request.IsEscalation ? "Ticket escalated." : "Ticket assigned." });
+        await _notifications.NotifyAsync(request.AssignedToUserId, "Ticket assigned",
+            $"You were assigned {ticket.ReferenceNumber}.", "Assignment", id);
+        return Ok(new { message = "Ticket assigned." });
     }
 
     [HttpPost("{id:int}/comments")]
     public async Task<IActionResult> AddComment(int id, [FromBody] CreateCommentRequest request)
     {
         var (user, roles) = await GetUserAsync();
-        var ticket = await LoadTicketDetail(id, user, roles);
+        var ticket = await _tickets.GetByIdForUserAsync(id, user, roles);
         if (ticket == null) return NotFound();
-
-        var permissions = TicketWorkflowService.GetPermissions(
-            ticket, TicketWorkflowService.GetState(ticket.Status), user, roles);
-        if (!permissions.CanComment)
-            return BadRequest(new { message = "Comments are not allowed on closed tickets." });
-
         if (request.IsInternal && !roles.Any(r => r is AppRoles.Admin or AppRoles.Agent))
             return Forbid();
 
@@ -273,39 +194,29 @@ public class TicketsController : ControllerBase
             IsInternal = request.IsInternal
         });
         await _db.SaveChangesAsync();
-        await _notifications.NotifyTicketInvolvedAsync(id, "New comment",
-            $"New comment on {ticket.ReferenceNumber}.", "Comment", user.Id);
+
+        var recipientIds = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ticket.CreatedByUserId) && ticket.CreatedByUserId != user.Id) recipientIds.Add(ticket.CreatedByUserId);
+        if (!string.IsNullOrWhiteSpace(ticket.AssignedToUserId) && ticket.AssignedToUserId != user.Id) recipientIds.Add(ticket.AssignedToUserId);
+
+        foreach (var recipientId in recipientIds.Distinct())
+            await _notifications.NotifyAsync(recipientId, "New comment", $"New comment on {ticket.ReferenceNumber}.", "Comment", id);
+
         return Ok(new { message = "Comment added." });
     }
 
     [HttpPost("{id:int}/attachments")]
-    [RequestSizeLimit(UploadSizeCapBytes)]
+    [RequestSizeLimit(10_485_760)]
     public async Task<IActionResult> Upload(int id, IFormFile file)
     {
         var (user, roles) = await GetUserAsync();
-        var ticket = await LoadTicketDetail(id, user, roles);
+        var ticket = await _tickets.GetByIdForUserAsync(id, user, roles);
         if (ticket == null) return NotFound();
-
-        var permissions = TicketWorkflowService.GetPermissions(
-            ticket, TicketWorkflowService.GetState(ticket.Status), user, roles);
-        if (!permissions.CanUpload)
-            return BadRequest(new { message = "Attachments are not allowed on closed tickets." });
-
-        var maxBytes = await _settings.GetMaxAttachmentBytesAsync();
-        var maxMb = maxBytes / (1024 * 1024);
-
         if (file.Length == 0) return BadRequest(new { message = "Empty file." });
-        if (file.Length > maxBytes)
-            return BadRequest(new { message = $"File exceeds {maxMb} MB limit." });
 
-        var count = await _db.TicketAttachments.CountAsync(a => a.TicketId == id);
-        if (count >= MaxAttachmentsPerTicket)
-            return BadRequest(new { message = $"Maximum {MaxAttachmentsPerTicket} attachments per ticket." });
-
-        var allowed = new[] { ".png", ".jpg", ".jpeg", ".webp", ".pdf", ".txt", ".log" };
+        var allowed = new[] { ".png", ".jpg", ".jpeg", ".pdf", ".txt", ".log" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!allowed.Contains(ext))
-            return BadRequest(new { message = $"Allowed: PNG, JPG, WEBP, PDF, TXT, LOG (max {maxMb} MB)." });
+        if (!allowed.Contains(ext)) return BadRequest(new { message = "File type not allowed." });
 
         var stored = $"{Guid.NewGuid()}{ext}";
         var path = Path.Combine("uploads", stored);
@@ -323,8 +234,6 @@ public class TicketsController : ControllerBase
             FileSizeBytes = file.Length
         });
         await _db.SaveChangesAsync();
-        await _notifications.NotifyTicketInvolvedAsync(id, "Attachment added",
-            $"File uploaded on {ticket.ReferenceNumber}: {file.FileName}", "Attachment", user.Id);
         return Ok(new { message = "File uploaded.", fileName = file.FileName });
     }
 
@@ -344,23 +253,15 @@ public class TicketsController : ControllerBase
         return (user, roles);
     }
 
-    private async Task<Ticket?> LoadTicketDetail(int id, ApplicationUser user, IList<string> roles) =>
-        await _tickets.QueryForUser(user, roles)
-            .Include(t => t.Category).Include(t => t.Priority).Include(t => t.Status)
-            .Include(t => t.CreatedBy).Include(t => t.AssignedTo)
-            .Include(t => t.Comments).ThenInclude(c => c.User)
-            .Include(t => t.Attachments)
-            .Include(t => t.Assignments).ThenInclude(a => a.AssignedTo)
-            .Include(t => t.Assignments).ThenInclude(a => a.AssignedBy)
-            .Include(t => t.StatusHistory).ThenInclude(h => h.ToStatus)
-            .Include(t => t.StatusHistory).ThenInclude(h => h.FromStatus)
-            .Include(t => t.StatusHistory).ThenInclude(h => h.ChangedByUserId)
-            .FirstOrDefaultAsync(t => t.Id == id);
-
     private async Task<TicketDetailDto> GetDto(int id, ApplicationUser user, IList<string> roles)
     {
-        var ticket = await LoadTicketDetail(id, user, roles);
-        return MapDetail(ticket!, user, roles);
+        var ticket = await _tickets.QueryForUser(user, roles)
+            .Include(t => t.Comments).ThenInclude(c => c.User)
+            .Include(t => t.Attachments)
+            .Include(t => t.StatusHistory).ThenInclude(h => h.ToStatus)
+            .Include(t => t.StatusHistory).ThenInclude(h => h.FromStatus)
+            .FirstAsync(t => t.Id == id);
+        return MapDetail(ticket, roles);
     }
 
     private static TicketListDto MapList(Ticket t) => new(
@@ -370,94 +271,17 @@ public class TicketsController : ControllerBase
         $"{t.CreatedBy.FirstName} {t.CreatedBy.LastName}",
         t.CreatedAt);
 
-    private TicketDetailDto MapDetail(Ticket t, ApplicationUser user, IList<string> roles)
-    {
-        var state = TicketWorkflowService.GetState(t.Status);
-        var permissions = TicketWorkflowService.GetPermissions(t, state, user, roles);
-        var end = t.ClosedAt ?? t.ResolvedAt;
-        var resolutionHours = end.HasValue ? Math.Round((end.Value - t.CreatedAt).TotalHours, 1) : (double?)null;
-        var agentsInvolved = t.Assignments.Select(a => a.AssignedToUserId).Distinct().Count();
-
-        var comments = t.Comments
-            .Where(c => !c.IsInternal || roles.Any(r => r is AppRoles.Admin or AppRoles.Agent))
+    private TicketDetailDto MapDetail(Ticket t, IList<string> roles) => new(
+        t.Id, t.ReferenceNumber, t.Title, t.Description,
+        t.Category.Name, t.CategoryId, t.Priority.Name, t.PriorityId,
+        t.Status.Name, t.StatusId,
+        $"{t.CreatedBy.FirstName} {t.CreatedBy.LastName}",
+        t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : null,
+        t.AssignedToUserId, t.CreatedAt, t.ResolvedAt,
+        t.Comments.Where(c => !c.IsInternal || roles.Any(r => r is AppRoles.Admin or AppRoles.Agent))
             .OrderBy(c => c.CreatedAt)
-            .Select(c => new CommentDto(c.Id, $"{c.User.FirstName} {c.User.LastName}", c.Body, c.IsInternal, c.CreatedAt))
-            .ToList();
-
-        var attachmentDtos = t.Attachments
-            .OrderBy(a => a.UploadedAt)
-            .Select(a => new AttachmentDto(a.Id, a.FileName, a.FileSizeBytes, a.UploadedAt, null))
-            .ToList();
-
-        var statusHistory = t.StatusHistory
-            .OrderByDescending(h => h.ChangedAt)
-            .Select(h => new StatusHistoryDto(
-                h.FromStatus?.Name,
-                h.ToStatus.Name,
-                "",
-                h.ChangedAt,
-                h.Notes))
-            .ToList();
-
-        var assignmentHistory = t.Assignments
-            .OrderByDescending(a => a.AssignedAt)
-            .Select(a => new AssignmentHistoryDto(
-                $"{a.AssignedTo.FirstName} {a.AssignedTo.LastName}",
-                $"{a.AssignedBy.FirstName} {a.AssignedBy.LastName}",
-                a.AssignedAt,
-                a.IsEscalation,
-                a.Notes))
-            .ToList();
-
-        var timeline = new List<TimelineEventDto>();
-        foreach (var h in t.StatusHistory.OrderBy(h => h.ChangedAt))
-        {
-            var from = h.FromStatus?.Name ?? "—";
-            timeline.Add(new TimelineEventDto(
-                "status",
-                $"Status: {from} → {h.ToStatus.Name}",
-                h.Notes ?? "",
-                "",
-                h.ChangedAt));
-        }
-        foreach (var a in t.Assignments.OrderBy(a => a.AssignedAt))
-        {
-            timeline.Add(new TimelineEventDto(
-                "assignment",
-                a.IsEscalation ? "Escalated" : "Assigned",
-                $"To {a.AssignedTo.FirstName} {a.AssignedTo.LastName}",
-                $"{a.AssignedBy.FirstName} {a.AssignedBy.LastName}",
-                a.AssignedAt));
-        }
-        foreach (var c in comments)
-        {
-            timeline.Add(new TimelineEventDto(
-                "comment",
-                c.IsInternal ? "Internal note" : "Comment",
-                c.Body,
-                c.AuthorName,
-                c.CreatedAt));
-        }
-        foreach (var a in t.Attachments.OrderBy(x => x.UploadedAt))
-        {
-            timeline.Add(new TimelineEventDto(
-                "attachment",
-                "Attachment added",
-                a.FileName,
-                "",
-                a.UploadedAt));
-        }
-        timeline = timeline.OrderBy(e => e.At).ToList();
-
-        return new TicketDetailDto(
-            t.Id, t.ReferenceNumber, t.Title, t.Description,
-            t.Category.Name, t.CategoryId, t.Priority.Name, t.PriorityId,
-            t.Status.Name, t.StatusId,
-            $"{t.CreatedBy.FirstName} {t.CreatedBy.LastName}",
-            t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : null,
-            t.AssignedToUserId,
-            t.CreatedAt, t.UpdatedAt, t.ResolvedAt, t.ClosedAt,
-            resolutionHours, agentsInvolved,
-            comments, attachmentDtos, statusHistory, assignmentHistory, timeline, permissions);
-    }
+            .Select(c => new CommentDto(c.Id, $"{c.User.FirstName} {c.User.LastName}", c.Body, c.IsInternal, c.CreatedAt)),
+        t.Attachments.Select(a => new AttachmentDto(a.Id, a.FileName, a.FileSizeBytes, a.UploadedAt)),
+        t.StatusHistory.OrderByDescending(h => h.ChangedAt)
+            .Select(h => new StatusHistoryDto(h.FromStatus?.Name, h.ToStatus.Name, "", h.ChangedAt)));
 }

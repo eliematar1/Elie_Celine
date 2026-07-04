@@ -1,5 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Text;
 using ITHelpDesk.API.Data;
 using ITHelpDesk.API.Models;
@@ -9,28 +7,23 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-
+using OfficeOpenXml;
+using QuestPDF;
+using QuestPDF.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "IT Help Desk API",
-        Version = "v1",
-        Description = "Week 2 — JWT Authentication & RBAC"
-    });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "IT Help Desk API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header. Example: Bearer {token}",
+        Description = "JWT: Bearer {token}",
         Name = "Authorization",
         In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT"
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
@@ -52,7 +45,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     if (useInMemory)
         options.UseInMemoryDatabase("ITHelpDesk");
     else
-        options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure(3));
+        options.UseSqlServer(connectionString);
 });
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -67,14 +60,25 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ActivityLogService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<TicketService>();
 builder.Services.AddScoped<AiService>();
-builder.Services.AddScoped<SystemSettingsService>();
-
 var jwtKey = builder.Configuration["Jwt:Key"]!;
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = 401;
+        return Task.CompletedTask;
+    };
+});
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -85,8 +89,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            RoleClaimType = System.Security.Claims.ClaimTypes.Role
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
 
@@ -95,7 +98,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminOnly", p => p.RequireRole(AppRoles.Admin));
     options.AddPolicy("ManagerOrAdmin", p => p.RequireRole(AppRoles.Admin, AppRoles.Manager));
     options.AddPolicy("AgentOrAdmin", p => p.RequireRole(AppRoles.Admin, AppRoles.Agent));
-    options.AddPolicy("EmployeeOrAbove", p => p.RequireRole(AppRoles.All));
 });
 
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
@@ -105,69 +107,35 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ReactApp", policy =>
         policy.WithOrigins(corsOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod()
+            .AllowCredentials());
 });
-
 var app = builder.Build();
-
+QuestPDF.Settings.License = LicenseType.Community;
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-    try
-    {
-        await db.Database.EnsureCreatedAsync();
-        logger.LogInformation("Database ready ({Provider})", useInMemory ? "InMemory" : "SqlServer");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Database connection failed. Set UseInMemoryDatabase=true in appsettings.");
-        throw;
-    }
-
+    await db.Database.EnsureCreatedAsync();
     await DbInitializer.SeedAsync(app.Services);
 }
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "IT Help Desk API v1"));
+    app.UseSwaggerUI();
 }
 
 app.UseCors("ReactApp");
-app.UseStaticFiles();
 app.UseAuthentication();
-app.Use(async (context, next) =>
-{
-    if (context.User.Identity?.IsAuthenticated == true)
-    {
-        var userId = context.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
-            ?? context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (!string.IsNullOrEmpty(userId))
-        {
-            var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
-            var user = await userManager.FindByIdAsync(userId);
-            if (user is null || !user.IsActive)
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsJsonAsync(new { message = "This account has been deactivated." });
-                return;
-            }
-        }
-    }
-    await next();
-});
 app.UseAuthorization();
 app.MapControllers();
 
-app.MapGet("/api/health", () => Results.Ok(new
+app.MapGet("/api/health", () => new
 {
     status = "ok",
     service = "IT Help Desk API",
     database = useInMemory ? "InMemory" : "SqlServer",
-    auth = "JWT + ASP.NET Identity",
     time = DateTime.UtcNow
-}));
+});
 
 app.Run();

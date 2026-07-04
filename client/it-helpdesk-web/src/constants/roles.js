@@ -4,7 +4,3 @@ export const AppRoles = {
   Employee: 'Employee',
   Manager: 'Manager',
 };
-
-export function canCreateTickets(hasRole) {
-  return hasRole(AppRoles.Admin) || hasRole(AppRoles.Employee);
-}

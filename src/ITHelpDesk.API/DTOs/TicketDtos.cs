@@ -1,7 +1,5 @@
 namespace ITHelpDesk.API.DTOs;
 
-using ITHelpDesk.API.Services;
-
 public record TicketListDto(
     int Id,
     string ReferenceNumber,
@@ -29,24 +27,15 @@ public record TicketDetailDto(
     string? AssignedToName,
     string? AssignedToUserId,
     DateTime CreatedAt,
-    DateTime UpdatedAt,
     DateTime? ResolvedAt,
-    DateTime? ClosedAt,
-    double? ResolutionHours,
-    int AgentsInvolved,
     IEnumerable<CommentDto> Comments,
     IEnumerable<AttachmentDto> Attachments,
-    IEnumerable<StatusHistoryDto> StatusHistory,
-    IEnumerable<AssignmentHistoryDto> AssignmentHistory,
-    IEnumerable<TimelineEventDto> Timeline,
-    TicketPermissionsDto Permissions
+    IEnumerable<StatusHistoryDto> StatusHistory
 );
 
 public record CommentDto(int Id, string AuthorName, string Body, bool IsInternal, DateTime CreatedAt);
-public record AttachmentDto(int Id, string FileName, long FileSizeBytes, DateTime UploadedAt, string? UploadedByName);
-public record StatusHistoryDto(string? FromStatus, string ToStatus, string ChangedByName, DateTime ChangedAt, string? Notes);
-public record AssignmentHistoryDto(string AssignedToName, string AssignedByName, DateTime AssignedAt, bool IsEscalation, string? Notes);
-public record TimelineEventDto(string Type, string Title, string Detail, string ActorName, DateTime At);
+public record AttachmentDto(int Id, string FileName, long FileSizeBytes, DateTime UploadedAt);
+public record StatusHistoryDto(string? FromStatus, string ToStatus, string ChangedByName, DateTime ChangedAt);
 
 public record CreateTicketRequest(string Title, string Description, int CategoryId, int PriorityId);
 public record UpdateTicketRequest(string? Title, string? Description, int? CategoryId, int? PriorityId, int? StatusId);
@@ -62,18 +51,12 @@ public record DashboardDto(
 
 public record CategoryCountDto(string Category, int Count);
 public record PriorityCountDto(string Priority, int Count);
-public record StatusCountDto(string Status, int Count);
-public record MonthlyTrendDto(string Month, int Created, int Resolved);
 
 public record ReportDto(
     int TotalTickets,
     int ResolvedTickets,
     double AvgResolutionDays,
-    IEnumerable<AgentPerformanceDto> AgentPerformance,
-    IEnumerable<CategoryCountDto> ByCategory,
-    IEnumerable<PriorityCountDto> ByPriority,
-    IEnumerable<StatusCountDto> ByStatus,
-    IEnumerable<MonthlyTrendDto> MonthlyTrend
+    IEnumerable<AgentPerformanceDto> AgentPerformance
 );
 
 public record AgentPerformanceDto(string AgentName, int Resolved, int Open, double AvgDays);
