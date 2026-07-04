@@ -1,18 +1,8 @@
 # IT Help Desk & Ticketing Management System
 
-**Full Stack — React + ASP.NET Core + SQL Server + JWT**  
-**Team:** Celine Mortada & Elie Matar · https://github.com/eliematar1/Elie_Celine
-
-## Quick start
-
-```powershell
-cd api-dev-server && npm start          # API (port 5000)
-cd client\it-helpdesk-web && npm run dev  # React (port 5173)
-```
-
-**Login:** `admin@ithelpdesk.local` / `Admin@123` → http://localhost:5173
-
-**Full documentation:** [docs/PROJECT-COMPLETE.md](docs/PROJECT-COMPLETE.md) · [Submission checklist](docs/SUBMISSION-CHECKLIST.md)
+**Full Stack Internship Project — Week 1**  
+**Team:** Celine Mortada & Elie Matar  
+**GitHub:** https://github.com/eliematar1/Elie_Celine
 
 ---
 
@@ -34,22 +24,12 @@ A modern web-based IT Help Desk system for employees to submit support requests 
 
 | Role | Permissions |
 |------|-------------|
-| Admin | Full system access (includes creating tickets) |
-| IT Support Agent | Manage and resolve tickets (no ticket creation) |
-| Employee | Create, edit, and track own tickets |
-| Manager | Monitor team tickets, assign agents, and view reports |
+| Admin | Full system access |
+| IT Support Agent | Manage and resolve tickets |
+| Employee | Create and track tickets |
+| Manager | Monitor team tickets and reports |
 
 ---
-
-## Week 2 Deliverables
-
-Login/Register, JWT auth, RBAC — see [docs/WEEK2-SUBMISSION.md](docs/WEEK2-SUBMISSION.md) and [docs/WEEK2-SETUP.md](docs/WEEK2-SETUP.md).
-
-| Item | Path |
-|------|------|
-| ASP.NET Core API | `src/ITHelpDesk.API/` |
-| React app | `client/it-helpdesk-web/` |
-| Run script | `scripts/run-now.ps1` |
 
 ## Week 1 Deliverables
 

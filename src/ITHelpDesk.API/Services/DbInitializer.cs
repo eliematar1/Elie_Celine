@@ -56,14 +56,6 @@ public static class DbInitializer
             await db.SaveChangesAsync();
         }
 
-        if (!await db.SystemSettings.AnyAsync())
-        {
-            db.SystemSettings.AddRange(
-                new SystemSetting { SettingKey = SystemSettingKeys.AutoAssignEnabled, SettingValue = "false" },
-                new SystemSetting { SettingKey = SystemSettingKeys.MaxAttachmentSizeMb, SettingValue = "10" });
-            await db.SaveChangesAsync();
-        }
-
         if (!await db.Tickets.AnyAsync())
         {
             var emp = await userManager.FindByEmailAsync("employee@ithelpdesk.local");

@@ -18,7 +18,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<TicketAssignment> TicketAssignments => Set<TicketAssignment>();
     public DbSet<TicketStatusHistory> TicketStatusHistory => Set<TicketStatusHistory>();
     public DbSet<Notification> Notifications => Set<Notification>();
-    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -40,10 +39,5 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         });
         builder.Entity<TicketComment>().HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.Entity<Notification>().HasIndex(n => new { n.UserId, n.IsRead });
-        builder.Entity<SystemSetting>(e =>
-        {
-            e.HasIndex(s => s.SettingKey).IsUnique();
-            e.Property(s => s.SettingKey).HasMaxLength(100);
-        });
     }
 }

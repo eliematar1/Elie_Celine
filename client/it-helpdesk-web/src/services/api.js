@@ -9,7 +9,9 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
@@ -18,6 +20,7 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
     }
     return Promise.reject(err);
   }
@@ -36,13 +39,4 @@ export const authApi = {
 export const usersApi = {
   list: () => api.get('/api/users'),
   roles: () => api.get('/api/users/roles'),
-  create: (data) => api.post('/api/users', data),
-  setStatus: (id, isActive) => api.patch(`/api/users/${id}/status`, { isActive }),
-  remove: (id) => api.delete(`/api/users/${id}`),
-  agents: () => api.get('/api/users/agents'),
-};
-
-export const settingsApi = {
-  get: () => api.get('/api/settings'),
-  update: (data) => api.put('/api/settings', data),
 };

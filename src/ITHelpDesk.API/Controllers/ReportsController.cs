@@ -7,7 +7,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
-
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+using OfficeOpenXml;
+using ClosedXML.Excel;
 namespace ITHelpDesk.API.Controllers;
 
 [ApiController]
@@ -52,44 +56,7 @@ public class ReportsController : ControllerBase
             perf.Add(new AgentPerformanceDto($"{agent.FirstName} {agent.LastName}", res, open, Math.Round(avg, 1)));
         }
 
-        var tickets = await q.ToListAsync();
-        var byCategory = tickets
-            .GroupBy(t => t.Category.Name)
-            .Select(g => new CategoryCountDto(g.Key, g.Count()))
-            .OrderByDescending(x => x.Count)
-            .ToList();
-        var byPriority = tickets
-            .GroupBy(t => t.Priority.Name)
-            .Select(g => new PriorityCountDto(g.Key, g.Count()))
-            .OrderByDescending(x => x.Count)
-            .ToList();
-        var byStatus = tickets
-            .GroupBy(t => t.Status.Name)
-            .Select(g => new StatusCountDto(g.Key, g.Count()))
-            .OrderByDescending(x => x.Count)
-            .ToList();
-
-        var monthlyTrend = new List<MonthlyTrendDto>();
-        for (var i = 5; i >= 0; i--)
-        {
-            var month = DateTime.UtcNow.AddMonths(-i);
-            var monthStart = new DateTime(month.Year, month.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-            var monthEnd = monthStart.AddMonths(1);
-            var label = monthStart.ToString("MMM yyyy");
-            var created = tickets.Count(t => t.CreatedAt >= monthStart && t.CreatedAt < monthEnd);
-            var resolved = tickets.Count(t => t.ResolvedAt >= monthStart && t.ResolvedAt < monthEnd);
-            monthlyTrend.Add(new MonthlyTrendDto(label, created, resolved));
-        }
-
-        return Ok(new ReportDto(
-            total,
-            resolved,
-            Math.Round(avgDays, 1),
-            perf,
-            byCategory,
-            byPriority,
-            byStatus,
-            monthlyTrend));
+        return Ok(new ReportDto(total, resolved, Math.Round(avgDays, 1), perf));
     }
 
     [HttpGet("export/csv")]
@@ -101,10 +68,138 @@ public class ReportsController : ControllerBase
             .OrderByDescending(t => t.CreatedAt).Take(500).ToListAsync();
 
         var sb = new StringBuilder();
-        sb.AppendLine("Reference,Title,Category,Priority,Status,Created");
+        sb.AppendLine("Reference,Title,Category,Priority,Status,Created,Assigned To,Created By");
         foreach (var t in tickets)
-            sb.AppendLine($"{t.ReferenceNumber},{t.Title},{t.Category.Name},{t.Priority.Name},{t.Status.Name},{t.CreatedAt:yyyy-MM-dd}");
+        {
+            var assigned = t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : "";
+            var created = $"{t.CreatedBy.FirstName} {t.CreatedBy.LastName}";
+            sb.AppendLine($"{t.ReferenceNumber},{t.Title},{t.Category.Name},{t.Priority.Name},{t.Status.Name},{t.CreatedAt:yyyy-MM-dd},{assigned},{created}");
+        }
 
         return File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "tickets-report.csv");
     }
+
+    [HttpGet("export/pdf")]
+    public async Task<IActionResult> ExportPdf()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        var roles = await _userManager.GetRolesAsync(user!);
+        var tickets = await _tickets.QueryForUser(user!, roles)
+            .OrderByDescending(t => t.CreatedAt).Take(500).ToListAsync();
+
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(2, Unit.Centimetre);
+                page.PageColor(Colors.White);
+
+                page.Header().Text("IT Help Desk - Ticket Report")
+                    .FontSize(18).Bold().FontColor(Colors.Blue.Darken2);
+
+                page.Content().Column(column =>
+                {
+                    column.Item().Text($"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC")
+                        .FontSize(10).FontColor(Colors.Grey.Medium);
+
+                    column.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.RelativeColumn(1);
+                            columns.RelativeColumn(2);
+                            columns.RelativeColumn(1);
+                            columns.RelativeColumn(1);
+                            columns.RelativeColumn(1);
+                            columns.RelativeColumn(1);
+                            columns.RelativeColumn(1);
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Text("Ref").Bold();
+                            header.Cell().Text("Title").Bold();
+                            header.Cell().Text("Category").Bold();
+                            header.Cell().Text("Priority").Bold();
+                            header.Cell().Text("Status").Bold();
+                            header.Cell().Text("Created").Bold();
+                            header.Cell().Text("Assigned").Bold();
+                        });
+
+                        foreach (var t in tickets.Take(50))
+                        {
+                            var assigned = t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : "-";
+                            table.Cell().Text(t.ReferenceNumber).FontSize(8);
+                            table.Cell().Text(t.Title).FontSize(8);
+                            table.Cell().Text(t.Category.Name).FontSize(8);
+                            table.Cell().Text(t.Priority.Name).FontSize(8);
+                            table.Cell().Text(t.Status.Name).FontSize(8);
+                            table.Cell().Text(t.CreatedAt.ToString("yyyy-MM-dd")).FontSize(8);
+                            table.Cell().Text(assigned).FontSize(8);
+                        }
+                    });
+
+                    if (tickets.Count > 50)
+                    {
+                        column.Item().Text($"Showing first 50 of {tickets.Count} tickets")
+                            .FontSize(9).FontColor(Colors.Grey.Medium);
+                    }
+                });
+
+                page.Footer().Text(text =>
+                {
+                    text.Span("Page ").FontSize(10);
+                    text.CurrentPageNumber().FontSize(10);
+                });
+            });
+        });
+
+        var pdfBytes = document.GeneratePdf();
+        return File(pdfBytes, "application/pdf", "tickets-report.pdf");
+    }
+   [HttpGet("export/excel")]
+public async Task<IActionResult> ExportExcel()
+{
+    var user = await _userManager.GetUserAsync(User);
+    var roles = await _userManager.GetRolesAsync(user!);
+    var tickets = await _tickets.QueryForUser(user!, roles)
+        .OrderByDescending(t => t.CreatedAt).Take(500).ToListAsync();
+
+    using var workbook = new ClosedXML.Excel.XLWorkbook();
+    var worksheet = workbook.Worksheets.Add("Tickets");
+
+    worksheet.Cell(1, 1).Value = "Reference";
+    worksheet.Cell(1, 2).Value = "Title";
+    worksheet.Cell(1, 3).Value = "Category";
+    worksheet.Cell(1, 4).Value = "Priority";
+    worksheet.Cell(1, 5).Value = "Status";
+    worksheet.Cell(1, 6).Value = "Created";
+    worksheet.Cell(1, 7).Value = "Assigned To";
+    worksheet.Cell(1, 8).Value = "Created By";
+
+    int row = 2;
+    foreach (var t in tickets)
+    {
+        var assigned = t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : "";
+        var created = $"{t.CreatedBy.FirstName} {t.CreatedBy.LastName}";
+        worksheet.Cell(row, 1).Value = t.ReferenceNumber;
+        worksheet.Cell(row, 2).Value = t.Title;
+        worksheet.Cell(row, 3).Value = t.Category.Name;
+        worksheet.Cell(row, 4).Value = t.Priority.Name;
+        worksheet.Cell(row, 5).Value = t.Status.Name;
+        worksheet.Cell(row, 6).Value = t.CreatedAt.ToString("yyyy-MM-dd");
+        worksheet.Cell(row, 7).Value = assigned;
+        worksheet.Cell(row, 8).Value = created;
+        row++;
+    }
+
+    worksheet.Columns().AdjustToContents();
+
+    using var stream = new MemoryStream();
+    workbook.SaveAs(stream);
+    var bytes = stream.ToArray();
+    
+    return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "tickets-report.xlsx");
+}
 }
