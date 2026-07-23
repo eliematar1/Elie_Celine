@@ -30,3 +30,7 @@ secrets.json
 
 # Logs
 *.log
+
+# Uploads
+api-dev-server/uploads/
+src/**/uploads/

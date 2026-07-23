@@ -4,7 +4,7 @@ import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
-import { AppRoles } from '../constants/roles';
+import { AppRoles, canCreateTickets } from '../constants/roles';
 import { STATS, TICKETS, CATEGORY_CHART } from '../data/mockData';
 import { dashboardApi } from '../services/ticketsApi';
 
@@ -61,6 +61,7 @@ export default function Dashboard() {
         { label: 'Low', value: 25 },
       ];
   const recentTickets = dashboardData?.recentTickets?.length ? dashboardData.recentTickets : TICKETS.slice(0, 4);
+  const isManager = hasRole(AppRoles.Manager);
 
   return (
     <>
@@ -72,7 +73,11 @@ export default function Dashboard() {
             <span className="role-pill">{user?.roles?.[0]}</span>
           </p>
         </div>
-        <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
+        {canCreateTickets(hasRole) ? (
+          <Link to="/tickets/new" className="btn btn-primary">+ New Ticket</Link>
+        ) : isManager && !hasRole(AppRoles.Admin) ? (
+          <Link to="/reports" className="btn btn-primary">View Reports</Link>
+        ) : null}
       </div>
 
       {loadingDashboard && <p className="text-muted">Loading analytics…</p>}

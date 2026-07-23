@@ -45,11 +45,23 @@ export default function Login() {
             {busy ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-        <p style={{ marginTop: 16, fontSize: '.9rem', textAlign: 'center' }}>
-          No account? <Link to="/register">Register</Link>
-        </p>
         <p style={{ marginTop: 8, fontSize: '.8rem', color: '#94a3b8', textAlign: 'center' }}>
-          Demo: admin@ithelpdesk.local / Admin@123
+          Demo (click to fill):<br />
+          <button type="button" className="link-btn" onClick={() => { setEmail('admin@ithelpdesk.local'); setPassword('Admin@123'); setError(''); }}>
+            admin@ithelpdesk.local / Admin@123
+          </button>
+          <br />
+          <button type="button" className="link-btn" onClick={() => { setEmail('manager@ithelpdesk.local'); setPassword('Manager@123'); setError(''); }}>
+            manager@ithelpdesk.local / Manager@123
+          </button>
+          <br />
+          <button type="button" className="link-btn" onClick={() => { setEmail('agent@ithelpdesk.local'); setPassword('Agent@123'); setError(''); }}>
+            agent@ithelpdesk.local / Agent@123
+          </button>
+          <br />
+          <button type="button" className="link-btn" onClick={() => { setEmail('employee@ithelpdesk.local'); setPassword('Employee@123'); setError(''); }}>
+            employee@ithelpdesk.local / Employee@123
+          </button>
         </p>
       </div>
     </div>
